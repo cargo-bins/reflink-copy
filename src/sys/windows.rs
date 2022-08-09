@@ -23,7 +23,7 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
 
     let src_metadata = src.metadata()?;
     let src_file_size = src_metadata.file_size();
-    let src_is_sparse = src_metadata.file_attributes() & FILE_ATTRIBUTE_SPARSE_FILE > 0;
+    let src_is_sparse = (src_metadata.file_attributes() & FILE_ATTRIBUTE_SPARSE_FILE) != 0;
 
     let dest = NamedTempFile::create_new(to)?;
 

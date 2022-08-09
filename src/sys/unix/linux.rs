@@ -15,7 +15,11 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
         .open(&to)?;
     let ret = unsafe {
         // http://man7.org/linux/man-pages/man2/ioctl_ficlonerange.2.html
-        libc::ioctl(dest.as_raw_fd(), FICLONE, src.as_raw_fd())
+        libc::ioctl(
+            dest.as_raw_fd(),
+            FICLONE.try_into().unwrap(),
+            src.as_raw_fd(),
+        )
     };
 
     if ret == -1 {

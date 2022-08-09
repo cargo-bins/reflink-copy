@@ -1,21 +1,15 @@
-#[cfg(any(target_os = "linux", target_os = "android"))]
-mod linux;
+use cfg_if::cfg_if;
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
-pub use linux::reflink;
-
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-mod macos;
-
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-pub use macos::reflink;
-
-#[cfg(not(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "macos",
-    target_os = "ios"
-)))]
-pub fn reflink(_from: &Path, _to: &Path) -> io::Result<()> {
-    super::reflink_not_supported()
+cfg_if! {
+    if #[cfg(any(target_os = "linux", target_os = "android"))] {
+        mod linux;
+        pub use linux::reflink;
+    } else if #[cfg(any(target_os = "macos", target_os = "ios"))] {
+        mod macos;
+        pub use macos::reflink;
+    } else {
+        pub fn reflink(_from: &Path, _to: &Path) -> io::Result<()> {
+            super::reflink_not_supported()
+        }
+    }
 }

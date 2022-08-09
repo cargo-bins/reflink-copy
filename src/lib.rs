@@ -28,16 +28,27 @@ use std::path::Path;
 ///     Err(e) => println!("error while reflinking: {:?}", e)
 /// }
 /// ```
+///
 /// # Implementation details per platform
+///
 /// ## Linux / Android
+///
 /// Uses `ioctl_ficlone`. Supported file systems include btrfs and XFS (and maybe more in the future).
+/// NOTE that it generates a temporary file and is not atomic.
+///
 /// ## OS X / ios
+///
 /// Uses `clonefile` library function. This is supported on OS X Version >=10.12 and iOS version >= 10.0
 /// This will work on APFS partitions (which means most desktop systems are capable).
+///
 /// ## Windows
+///
 /// Uses ioctl `FSCTL_DUPLICATE_EXTENTS_TO_FILE`.
+///
 /// Only supports ReFS on Windows Server. *Important note*: The windows implementation is currently
 /// untested and probably buggy. Contributions/testers with access to a Windows Server welcome.
+///
+/// NOTE that it generates a temporary file and is not atomic.
 pub fn reflink<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> io::Result<()> {
     let (from, to) = (from.as_ref(), to.as_ref());
     if !from.is_file() {

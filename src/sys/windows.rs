@@ -64,10 +64,10 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
     // We must end at a cluster boundary
     let total_copy_len: i64 = {
         if cluster_size == 0 {
-            src_file_size as i64
+            src_file_size.try_into().unwrap()
         } else {
             // Round to the next cluster size
-            round_up(src_file_size as i64, cluster_size)
+            round_up(src_file_size.try_into().unwrap(), cluster_size)
         }
     };
 
@@ -95,7 +95,9 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
                 dest.as_raw_handle() as _,
                 ffi::FSCTL_DUPLICATE_EXTENTS_TO_FILE,
                 dup_extent.as_mut_ptr() as *mut _,
-                mem::size_of::<ffi::DUPLICATE_EXTENTS_DATA>() as u32,
+                mem::size_of::<ffi::DUPLICATE_EXTENTS_DATA>()
+                    .try_into()
+                    .unwrap(),
                 ptr::null_mut(),
                 0,
                 &mut bytes_returned as *mut _,

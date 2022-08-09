@@ -17,7 +17,7 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
     let ret = unsafe {
         // http://man7.org/linux/man-pages/man2/ioctl_ficlonerange.2.html
         libc::ioctl(
-            dest.inner.as_raw_fd(),
+            dest.as_raw_fd(),
             FICLONE.try_into().unwrap(),
             src.as_raw_fd(),
         )

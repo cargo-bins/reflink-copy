@@ -1,5 +1,7 @@
 use std::{
-    cmp, fs, io, mem,
+    cmp,
+    fs::{self, File},
+    io, mem,
     os::windows::fs::MetadataExt,
     os::windows::io::{AsRawHandle, RawHandle},
     path::Path,
@@ -19,7 +21,7 @@ use super::utility::NamedTempFile;
 
 pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
     // Inspired by https://github.com/0xbadfca11/reflink/blob/master/reflink.cpp
-    let src = fs::File::open(&from)?;
+    let src = File::open(&from)?;
 
     let src_metadata = src.metadata()?;
     let src_file_size = src_metadata.file_size();

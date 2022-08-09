@@ -149,13 +149,14 @@ impl FileExt for File {
     fn get_integrity_information(&self) -> io::Result<ffi::FSCTL_GET_INTEGRITY_INFORMATION_BUFFER> {
         let mut bytes_returned = 0u32;
         unsafe {
-            let mut integrity_info: ffi::FSCTL_GET_INTEGRITY_INFORMATION_BUFFER = mem::zeroed();
+            let mut integrity_info: MaybeUninit<ffi::FSCTL_GET_INTEGRITY_INFORMATION_BUFFER> =
+                MaybeUninit::uninit();
             let res = DeviceIoControl(
                 self.as_raw_handle() as _,
                 FSCTL_GET_INTEGRITY_INFORMATION,
                 ptr::null_mut(),
                 0,
-                &mut integrity_info as *mut _ as *mut _,
+                integrity_info.as_mut_ptr() as *mut _,
                 mem::size_of::<ffi::FSCTL_GET_INTEGRITY_INFORMATION_BUFFER>() as u32,
                 &mut bytes_returned as *mut _,
                 ptr::null_mut(),
@@ -163,7 +164,7 @@ impl FileExt for File {
             if res == 0 {
                 Err(io::Error::last_os_error())
             } else {
-                Ok(integrity_info)
+                Ok(unsafe { integrity_info.assume_init() })
             }
         }
     }

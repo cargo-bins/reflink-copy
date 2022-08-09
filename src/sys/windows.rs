@@ -1,7 +1,7 @@
 use std::{
     cmp,
     convert::TryInto,
-    fs::{self, File},
+    fs::File,
     io,
     mem::{self, MaybeUninit},
     os::windows::fs::MetadataExt,

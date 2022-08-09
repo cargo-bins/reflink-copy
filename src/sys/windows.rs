@@ -118,7 +118,7 @@ trait FileExt {
     fn is_block_cloning_supported(&self) -> io::Result<bool>;
 }
 
-impl RawHandle for NamedTempFile {
+impl AsRawHandle for NamedTempFile {
     fn as_raw_handle(&self) -> RawHandle {
         self.inner.as_raw_handle()
     }

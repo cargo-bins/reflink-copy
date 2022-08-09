@@ -19,7 +19,7 @@ use winapi::um::{
     winnt::{FILE_ATTRIBUTE_SPARSE_FILE, FILE_SUPPORTS_BLOCK_REFCOUNTING},
 };
 
-use super::utility::NamedTempFile;
+use super::utility::AutoRemovedFile;
 
 pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
     // Inspired by https://github.com/0xbadfca11/reflink/blob/master/reflink.cpp
@@ -29,7 +29,7 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
     let src_file_size = src_metadata.file_size();
     let src_is_sparse = (src_metadata.file_attributes() & FILE_ATTRIBUTE_SPARSE_FILE) != 0;
 
-    let dest = NamedTempFile::create_new(to)?;
+    let dest = AutoRemovedFile::create_new(to)?;
 
     if src_is_sparse {
         dest.set_sparse()?;
@@ -223,13 +223,13 @@ impl FileExt for File {
     }
 }
 
-impl AsRawHandle for NamedTempFile {
+impl AsRawHandle for AutoRemovedFile {
     fn as_raw_handle(&self) -> RawHandle {
         self.inner.as_raw_handle()
     }
 }
 
-impl FileExt for NamedTempFile {
+impl FileExt for AutoRemovedFile {
     fn set_sparse(&self) -> io::Result<()> {
         self.inner.set_sparse()
     }

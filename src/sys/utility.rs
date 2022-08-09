@@ -9,12 +9,12 @@ use std::{
 use derive_destructure2::destructure;
 
 #[derive(Debug, destructure)]
-pub(super) struct NamedTempFile {
+pub(super) struct AutoRemovedFile {
     pub(super) inner: File,
     path: PathBuf,
 }
 
-impl NamedTempFile {
+impl AutoRemovedFile {
     pub(super) fn create_new(path: &Path) -> io::Result<Self> {
         // pass O_EXCL to mimic macos behaviour
         let inner = File::options().write(true).create_new(true).open(path)?;
@@ -30,7 +30,7 @@ impl NamedTempFile {
     }
 }
 
-impl Drop for NamedTempFile {
+impl Drop for AutoRemovedFile {
     fn drop(&mut self) {
         let _ = remove_file(&self.path);
     }

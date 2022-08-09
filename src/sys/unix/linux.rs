@@ -1,11 +1,9 @@
 use std::{fs, io, os::unix::io::AsRawFd, path::Path};
 
-// TODO is this equal on all archs? Just tested on x86_64 and x86.
-macro_rules! IOCTL_FICLONE {
-    () => {
-        0x40049409
-    };
-}
+use ioctl_sys::iow;
+use libc::c_int;
+
+const FICLONE: c_int = iow(0x94, 9, c_int);
 
 pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
     let src = fs::File::open(&from)?;
@@ -17,7 +15,7 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
         .open(&to)?;
     let ret = unsafe {
         // http://man7.org/linux/man-pages/man2/ioctl_ficlonerange.2.html
-        libc::ioctl(dest.as_raw_fd(), IOCTL_FICLONE!(), src.as_raw_fd())
+        libc::ioctl(dest.as_raw_fd(), FICLONE, src.as_raw_fd())
     };
 
     if ret == -1 {

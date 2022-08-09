@@ -1,7 +1,8 @@
 use std::{
     cmp,
     fs::{self, File},
-    io, mem,
+    io,
+    mem::{self, MaybeUninit},
     os::windows::fs::MetadataExt,
     os::windows::io::{AsRawHandle, RawHandle},
     path::Path,
@@ -55,8 +56,10 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
     dest.inner.set_len(src_file_size)?;
 
     // Preparation done, now reflink
-    let mut dup_extent: ffi::DUPLICATE_EXTENTS_DATA = unsafe { mem::uninitialized() };
-    dup_extent.FileHandle = src.as_raw_handle();
+    let mut dup_extent: MaybeUninit<ffi::DUPLICATE_EXTENTS_DATA> = MaybeUninit::uninit();
+    unsafe {
+        (*dup_extent.as_mut_ptr()).FileHandle = src.as_raw_handle();
+    }
 
     // We must end at a cluster boundary
     let total_copy_len: i64 = {
@@ -82,16 +85,16 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
             debug_assert_eq!(bytes_copied % cluster_size, 0);
         }
         unsafe {
-            *dup_extent.SourceFileOffset.QuadPart_mut() = bytes_copied;
-            *dup_extent.TargetFileOffset.QuadPart_mut() = bytes_copied;
-            *dup_extent.ByteCount.QuadPart_mut() = bytes_to_copy;
+            (*dup_extent.as_mut_ptr()).SourceFileOffset.QuadPart_mut() = bytes_copied;
+            (*dup_extent.as_mut_ptr()).TargetFileOffset.QuadPart_mut() = bytes_copied;
+            (*dup_extent.as_mut_ptr()).ByteCount.QuadPart_mut() = bytes_to_copy;
         }
         let mut bytes_returned = 0u32;
         let res = unsafe {
             DeviceIoControl(
                 dest.as_raw_handle() as _,
                 ffi::FSCTL_DUPLICATE_EXTENTS_TO_FILE,
-                &mut dup_extent as *mut _ as *mut _,
+                dup_extent.as_mut_ptr() as *mut _,
                 mem::size_of::<ffi::DUPLICATE_EXTENTS_DATA>() as u32,
                 ptr::null_mut(),
                 0,

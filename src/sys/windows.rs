@@ -213,11 +213,7 @@ impl FileExt for File {
         if res == 0 {
             Err(io::Error::last_os_error())
         } else {
-            if (flags & FILE_SUPPORTS_BLOCK_REFCOUNTING) != 0 {
-                Ok(true)
-            } else {
-                Ok(false)
-            }
+            Ok((flags & FILE_SUPPORTS_BLOCK_REFCOUNTING) != 0)
         }
     }
 }

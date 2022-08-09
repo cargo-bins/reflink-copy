@@ -38,8 +38,12 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
     let src_integrity_info = src.get_integrity_information()?;
     let cluster_size = src_integrity_info.ClusterSizeInBytes as i64;
     if cluster_size != 0 {
-        // Cluster size must either be 4K or 64K (restricted by ReFS)
-        assert!(cluster_size == 4 * 1024 || cluster_size == 64 * 1024);
+        if cluster_size != 4 * 1024 && cluster_size != 64 * 1024 {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                "Cluster size of source must either be 4K or 64K (restricted by ReFS)",
+            ));
+        }
         // Copy over integrity information. Not sure if this is required.
         let mut dest_integrity_info = ffi::FSCTL_SET_INTEGRITY_INFORMATION_BUFFER {
             ChecksumAlgorithm: src_integrity_info.ChecksumAlgorithm,

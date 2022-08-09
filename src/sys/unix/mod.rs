@@ -8,8 +8,6 @@ cfg_if! {
         mod macos;
         pub use macos::reflink;
     } else {
-        pub fn reflink(_from: &Path, _to: &Path) -> io::Result<()> {
-            super::reflink_not_supported()
-        }
+        use super::reflink_not_supported as reflink;
     }
 }

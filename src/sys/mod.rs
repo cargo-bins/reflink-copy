@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use cfg_if::cfg_if;
 
 cfg_if! {
@@ -8,12 +10,11 @@ cfg_if! {
         mod windows;
         pub use windows::reflink;
     } else {
-        mod others;
-        pub use others::reflink;
+        use reflink_not_supported as reflink;
     }
 }
 
 #[allow(dead_code)]
-fn reflink_not_supported() -> std::io::Result<()> {
+fn reflink_not_supported(_from: &Path, _to: &Path) -> std::io::Result<()> {
     Err(std::io::ErrorKind::Unsupported.into())
 }

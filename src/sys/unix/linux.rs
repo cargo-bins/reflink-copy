@@ -3,7 +3,7 @@ use std::{fs, io, os::unix::io::AsRawFd, path::Path};
 use ioctl_sys::iow;
 use libc::c_int;
 
-const FICLONE: c_int = iow!(0x94, 9, c_int);
+const FICLONE: c_int = iow!(0x94 as c_int, 9 as c_int, c_int);
 
 pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
     let src = fs::File::open(&from)?;

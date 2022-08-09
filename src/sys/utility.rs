@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::{
     fs::{remove_file, File},
     io,
@@ -5,7 +7,7 @@ use std::{
 };
 
 #[cfg(unix)]
-use std::os::unix::io::{RawFd, AsRawFd};
+use std::os::unix::io::{AsRawFd, RawFd};
 
 #[derive(Debug)]
 pub(super) struct AutoRemovedFile {

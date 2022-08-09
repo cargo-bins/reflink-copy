@@ -246,9 +246,14 @@ impl FileExt for NamedTempFile {
     }
 }
 
-/// Rounds `num_to_round` to the next multiple of `multiple`, if `mutliple is a power of 2`
+/// Rounds `num_to_round` to the next multiple of `multiple`
+///
+/// # Precondition
+///  - `multiple` > 0
+///  - `mutliple` is a power of 2
 fn round_up(num_to_round: i64, multiple: i64) -> i64 {
-    assert!(multiple != 0 && ((multiple & (multiple - 1)) == 0));
+    debug_assert!(multiple > 0);
+    debug_assert_eq!((multiple & (multiple - 1)), 0);
     (num_to_round + multiple - 1) & -multiple
 }
 

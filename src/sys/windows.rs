@@ -105,7 +105,6 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
             )
         };
         if res == 0 {
-            let _ = fs::remove_file(to);
             return Err(io::Error::last_os_error());
         }
         bytes_copied += bytes_to_copy;

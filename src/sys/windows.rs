@@ -3,7 +3,7 @@ use std::fs;
 use std::io;
 use std::mem;
 use std::os::windows::fs::MetadataExt;
-use std::os::windows::io::AsRawHandle;
+use std::os::windows::io::{AsRawHandle, RawHandle};
 use std::path::Path;
 use std::ptr;
 
@@ -14,17 +14,7 @@ use winapi::um::winioctl::{
 };
 use winapi::um::winnt::{FILE_ATTRIBUTE_SPARSE_FILE, FILE_SUPPORTS_BLOCK_REFCOUNTING};
 
-macro_rules! try_cleanup {
-    ($expr:expr, $dest:ident) => {
-        match $expr {
-            Ok(val) => val,
-            Err(err) => {
-                let _ = fs::remove_file($dest);
-                return Err(err);
-            }
-        }
-    };
-}
+use super::utility::NamedTempFile;
 
 pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
     // Inspired by https://github.com/0xbadfca11/reflink/blob/master/reflink.cpp
@@ -34,16 +24,13 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
     let src_file_size = src_metadata.file_size();
     let src_is_sparse = src_metadata.file_attributes() & FILE_ATTRIBUTE_SPARSE_FILE > 0;
 
-    let dest = fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&to)?;
+    let dest = NamedTempFile::create_new(to)?;
 
     if src_is_sparse {
-        try_cleanup!(dest.set_sparse(), to);
+        dest.set_sparse()?;
     }
 
-    let src_integrity_info = try_cleanup!(src.get_integrity_information(), to);
+    let src_integrity_info = src.get_integrity_information()?;
     let cluster_size = src_integrity_info.ClusterSizeInBytes as i64;
     if cluster_size != 0 {
         // Cluster size must either be 4K or 64K (restricted by ReFS)
@@ -54,7 +41,7 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
             Reserved: src_integrity_info.Reserved,
             Flags: src_integrity_info.Flags,
         };
-        try_cleanup!(dest.set_integrity_information(&mut dest_integrity_info), to);
+        dest.set_integrity_information(&mut dest_integrity_info)?;
     }
 
     // file_size must be sufficient to hold the data.
@@ -62,7 +49,7 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
     // Later on, we round up the bytes to copy in order to end at a cluster boundary.
     // This might very well result in us cloning past the file end.
     // Let's hope windows api sanitizes this, because otherwise a clean implementation is not really possible.
-    try_cleanup!(dest.set_len(src_file_size), to);
+    dest.set_len(src_file_size)?;
 
     // Preparation done, now reflink
     let mut dup_extent: ffi::DUPLICATE_EXTENTS_DATA = unsafe { mem::uninitialized() };
@@ -115,6 +102,7 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
         }
         bytes_copied += bytes_to_copy;
     }
+    dest.persist();
     Ok(())
 }
 
@@ -129,7 +117,13 @@ trait FileExt {
     fn is_block_cloning_supported(&self) -> io::Result<bool>;
 }
 
-impl FileExt for fs::File {
+impl RawHandle for NamedTempFile {
+    fn as_raw_handle(&self) -> RawHandle {
+        self.inner.as_raw_handle()
+    }
+}
+
+impl FileExt for NamedTempFile {
     fn set_sparse(&self) -> io::Result<()> {
         let mut bytes_returned = 0u32;
         let res = unsafe {

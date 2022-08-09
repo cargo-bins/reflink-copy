@@ -2,6 +2,8 @@ use std::path::Path;
 
 use cfg_if::cfg_if;
 
+mod utility;
+
 cfg_if! {
     if #[cfg(unix)] {
         mod unix;

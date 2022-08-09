@@ -1,5 +1,6 @@
 use std::{
     cmp,
+    convert::TryInto,
     fs::{self, File},
     io,
     mem::{self, MaybeUninit},

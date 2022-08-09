@@ -157,7 +157,9 @@ impl FileExt for File {
                 ptr::null_mut(),
                 0,
                 integrity_info.as_mut_ptr() as *mut _,
-                mem::size_of::<ffi::FSCTL_GET_INTEGRITY_INFORMATION_BUFFER>() as u32,
+                mem::size_of::<ffi::FSCTL_GET_INTEGRITY_INFORMATION_BUFFER>()
+                    .try_into()
+                    .unwrap(),
                 &mut bytes_returned as *mut _,
                 ptr::null_mut(),
             );
@@ -178,7 +180,9 @@ impl FileExt for File {
                 self.as_raw_handle() as _,
                 FSCTL_SET_INTEGRITY_INFORMATION,
                 integrity_info as *mut _ as *mut _,
-                mem::size_of::<ffi::FSCTL_SET_INTEGRITY_INFORMATION_BUFFER>() as u32,
+                mem::size_of::<ffi::FSCTL_SET_INTEGRITY_INFORMATION_BUFFER>()
+                    .try_into()
+                    .unwrap(),
                 ptr::null_mut(),
                 0,
                 ptr::null_mut(),

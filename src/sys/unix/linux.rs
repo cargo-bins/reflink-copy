@@ -1,4 +1,4 @@
-use std::{fs, io, mem::size_of, os::unix::io::AsRawFd, path::Path};
+use std::{convert::TryInto, fs, io, mem::size_of, os::unix::io::AsRawFd, path::Path};
 
 use ioctl_sys::iow;
 use libc::c_int;

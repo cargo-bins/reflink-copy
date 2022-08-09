@@ -238,7 +238,7 @@ impl FileExt for NamedTempFile {
         &self,
         integrity_info: &mut ffi::FSCTL_SET_INTEGRITY_INFORMATION_BUFFER,
     ) -> io::Result<()> {
-        self.inner.set_integrity_information()
+        self.inner.set_integrity_information(integrity_info)
     }
 
     fn is_block_cloning_supported(&self) -> io::Result<bool> {

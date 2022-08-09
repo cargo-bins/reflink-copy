@@ -28,7 +28,7 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
     if ret == -1 {
         Err(io::Error::last_os_error())
     } else {
-        dest.persist_noclubber(to)
+        dest.persist_noclobber(to)
             .map_err(|persist_err| persist_err.error)?;
         Ok(())
     }

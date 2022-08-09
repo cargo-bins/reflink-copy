@@ -17,7 +17,6 @@ exclude = ["/.travis.yml"]
 travis-ci = { repository = "nicokoch/reflink" }
 
 [dependencies]
-tempfile = "3.3.0"
 cfg-if = "1.0.0"
 
 [target.'cfg(unix)'.dependencies]
@@ -30,3 +29,4 @@ ioctl-sys = "0.8.0"
 winapi = { version = "0.3", features = ["ioapiset", "winioctl", "fileapi"] }
 
 [dev-dependencies]
+tempfile = "3.3.0"

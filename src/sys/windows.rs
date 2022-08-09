@@ -86,9 +86,9 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
             debug_assert_eq!(bytes_copied % cluster_size, 0);
         }
         unsafe {
-            (*dup_extent.as_mut_ptr()).SourceFileOffset.QuadPart_mut() = bytes_copied;
-            (*dup_extent.as_mut_ptr()).TargetFileOffset.QuadPart_mut() = bytes_copied;
-            (*dup_extent.as_mut_ptr()).ByteCount.QuadPart_mut() = bytes_to_copy;
+            *(*dup_extent.as_mut_ptr()).SourceFileOffset.QuadPart_mut() = bytes_copied;
+            *(*dup_extent.as_mut_ptr()).TargetFileOffset.QuadPart_mut() = bytes_copied;
+            *(*dup_extent.as_mut_ptr()).ByteCount.QuadPart_mut() = bytes_to_copy;
         }
         let mut bytes_returned = 0u32;
         let res = unsafe {

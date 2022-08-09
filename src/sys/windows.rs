@@ -1,18 +1,19 @@
-use std::cmp;
-use std::fs;
-use std::io;
-use std::mem;
-use std::os::windows::fs::MetadataExt;
-use std::os::windows::io::{AsRawHandle, RawHandle};
-use std::path::Path;
-use std::ptr;
-
-use winapi::um::fileapi::GetVolumeInformationByHandleW;
-use winapi::um::ioapiset::DeviceIoControl;
-use winapi::um::winioctl::{
-    FSCTL_GET_INTEGRITY_INFORMATION, FSCTL_SET_INTEGRITY_INFORMATION, FSCTL_SET_SPARSE,
+use std::{
+    cmp, fs, io, mem,
+    os::windows::fs::MetadataExt,
+    os::windows::io::{AsRawHandle, RawHandle},
+    path::Path,
+    ptr,
 };
-use winapi::um::winnt::{FILE_ATTRIBUTE_SPARSE_FILE, FILE_SUPPORTS_BLOCK_REFCOUNTING};
+
+use winapi::um::{
+    fileapi::GetVolumeInformationByHandleW,
+    ioapiset::DeviceIoControl,
+    winioctl::{
+        FSCTL_GET_INTEGRITY_INFORMATION, FSCTL_SET_INTEGRITY_INFORMATION, FSCTL_SET_SPARSE,
+    },
+    {FILE_ATTRIBUTE_SPARSE_FILE, FILE_SUPPORTS_BLOCK_REFCOUNTING},
+};
 
 use super::utility::NamedTempFile;
 
@@ -227,8 +228,10 @@ fn round_up(num_to_round: i64, multiple: i64) -> i64 {
 #[allow(non_snake_case)]
 mod ffi {
     use std::os::windows::raw::HANDLE;
-    use winapi::shared::minwindef::{DWORD, WORD};
-    use winapi::shared::ntdef::LARGE_INTEGER;
+    use winapi::shared::{
+        minwindef::{DWORD, WORD},
+        ntdef::LARGE_INTEGER,
+    };
 
     pub const FSCTL_DUPLICATE_EXTENTS_TO_FILE: u32 = 0x98344;
 

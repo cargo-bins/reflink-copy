@@ -36,7 +36,7 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
     }
 
     let src_integrity_info = src.get_integrity_information()?;
-    let cluster_size = src_integrity_info.ClusterSizeInBytes as i64;
+    let cluster_size: i64 = src_integrity_info.ClusterSizeInBytes.try_into().unwrap();
     if cluster_size != 0 {
         if cluster_size != 4 * 1024 && cluster_size != 64 * 1024 {
             return Err(io::Error::new(

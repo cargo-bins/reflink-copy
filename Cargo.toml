@@ -18,7 +18,6 @@ travis-ci = { repository = "nicokoch/reflink" }
 
 [dependencies]
 cfg-if = "1.0.0"
-derive_destructure2 = "0.1.0"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

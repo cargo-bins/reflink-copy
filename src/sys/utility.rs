@@ -28,8 +28,8 @@ impl AutoRemovedFile {
     }
 
     #[cfg(unix)]
-    pub fn as_raw_fd(&self) -> Option<RawFd> {
-        self.inner.as_ref().map(|file| file.as_raw_fd())
+    pub fn as_raw_fd(&self) -> RawFd {
+        self.inner.as_ref().unwrap().as_raw_fd()
     }
 
     pub fn persist(mut self) {

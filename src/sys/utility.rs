@@ -29,11 +29,15 @@ impl AutoRemovedFile {
 
     #[cfg(unix)]
     pub fn as_raw_fd(&self) -> RawFd {
-        self.inner.as_ref().unwrap().as_raw_fd()
+        self.as_inner_file().as_raw_fd()
     }
 
     pub fn persist(mut self) {
         self.inner.take();
+    }
+
+    pub fn as_inner_file(&self) -> &File {
+        self.inner.as_ref().unwrap()
     }
 }
 

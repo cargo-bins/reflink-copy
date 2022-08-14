@@ -58,7 +58,7 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
     // Later on, we round up the bytes to copy in order to end at a cluster boundary.
     // This might very well result in us cloning past the file end.
     // Let's hope windows api sanitizes this, because otherwise a clean implementation is not really possible.
-    dest.inner.set_len(src_file_size)?;
+    dest.as_inner_file().set_len(src_file_size)?;
 
     // Preparation done, now reflink
     let mut dup_extent: MaybeUninit<ffi::DUPLICATE_EXTENTS_DATA> = MaybeUninit::uninit();

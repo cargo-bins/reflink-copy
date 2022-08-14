@@ -225,28 +225,29 @@ impl FileExt for File {
 
 impl AsRawHandle for AutoRemovedFile {
     fn as_raw_handle(&self) -> RawHandle {
-        self.inner.as_raw_handle()
+        self.as_inner_file().as_raw_handle()
     }
 }
 
 impl FileExt for AutoRemovedFile {
     fn set_sparse(&self) -> io::Result<()> {
-        self.inner.set_sparse()
+        self.as_inner_file().set_sparse()
     }
 
     fn get_integrity_information(&self) -> io::Result<ffi::FSCTL_GET_INTEGRITY_INFORMATION_BUFFER> {
-        self.inner.get_integrity_information()
+        self.as_inner_file().get_integrity_information()
     }
 
     fn set_integrity_information(
         &self,
         integrity_info: &mut ffi::FSCTL_SET_INTEGRITY_INFORMATION_BUFFER,
     ) -> io::Result<()> {
-        self.inner.set_integrity_information(integrity_info)
+        self.as_inner_file()
+            .set_integrity_information(integrity_info)
     }
 
     fn is_block_cloning_supported(&self) -> io::Result<bool> {
-        self.inner.is_block_cloning_supported()
+        self.as_inner_file().is_block_cloning_supported()
     }
 }
 

@@ -79,7 +79,7 @@ jobs:
       run: sudo apt-get install -y musl-tools
 
     - name: Test
-      if: "!matrix.use-cross"
+      if: ${{ !matrix.use-cross && matrix.target != 'aarch64-apple-darwin' }}
       run: cargo test --target ${{ matrix.target }}
 
     - name: Test using cross

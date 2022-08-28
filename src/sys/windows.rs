@@ -1,5 +1,4 @@
 use std::{
-    cmp,
     convert::TryInto,
     fs::File,
     io,
@@ -84,7 +83,7 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
         (4 * 1024 * 1024 * 1024) - cluster_size
     };
     while bytes_copied < total_copy_len {
-        let bytes_to_copy = cmp::min(total_copy_len, max_copy_len);
+        let bytes_to_copy = total_copy_len.min(max_copy_len);
         if cluster_size != 0 {
             debug_assert_eq!(bytes_to_copy % cluster_size, 0);
             debug_assert_eq!(bytes_copied % cluster_size, 0);

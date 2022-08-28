@@ -85,3 +85,7 @@ jobs:
     - name: Test using cross
       if: "matrix.use-cross"
       run: cross test --target ${{ matrix.target }}
+
+    - name: Build for aarch64-apple-darwin
+      if: ${{ matrix.target == 'aarch64-apple-darwin' }}
+      run: cargo build --target ${{ matrix.target }}

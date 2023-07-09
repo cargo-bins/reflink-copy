@@ -1,20 +1,16 @@
 [package]
-name = "reflink"
-version = "0.1.3"
-authors = ["Nicolas Koch <nioko1337@gmail.com>"]
+name = "reflink-copy"
+version = "0.1.4"
+authors = ["Jiahao XU <Jiahao_XU@outlook.com>"]
 edition = "2018"
 description = "copy-on-write mechanism on supported file systems"
-documentation = "https://docs.rs/reflink/*/reflink/"
-homepage = "https://github.com/nicokoch/reflink"
-repository = "https://github.com/nicokoch/reflink"
+documentation = "https://docs.rs/reflink-copy"
+homepage = "https://github.com/cargo-bins/reflink-copy"
+repository = "https://github.com/cargo-bins/reflink-copy"
 readme = "README.md"
 keywords = ["reflink", "COW", "copy", "btrfs", "xfs"]
 categories = ["filesystem", "os"]
 license = "MIT/Apache-2.0"
-exclude = ["/.travis.yml"]
-
-[badges]
-travis-ci = { repository = "nicokoch/reflink" }
 
 [dependencies]
 cfg-if = "1.0.0"

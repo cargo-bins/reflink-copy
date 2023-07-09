@@ -1,6 +1,6 @@
-# reflink
-[![](http://meritbadge.herokuapp.com/reflink)](https://crates.io/crates/reflink)
-[![Build Status](https://travis-ci.org/nicokoch/reflink.svg?branch=master)](https://travis-ci.org/nicokoch/reflink)
+# reflink-copy
+
+[![Build](https://github.com/cargo-bins/reflink/actions/workflows/build.yml/badge.svg)](https://github.com/cargo-bins/reflink/actions/workflows/build.yml)
 
 Cross-platform(!) COW reflink copy of files
 
@@ -9,4 +9,4 @@ On a high level, the new file does not actually get copied, but shares the same 
 As soon as one of the files is modified, the actual copying is done by the underlying OS.
 
 This library supports Linux, Android, OSX, ios and Windows. As soon as other OS support the functionality, support will be added.
-For implementation details, visit the [docs](https://docs.rs/reflink/*/reflink/).
+For implementation details, visit the [docs](https://docs.rs/reflink-copy).

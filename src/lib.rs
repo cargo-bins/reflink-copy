@@ -22,8 +22,7 @@ use std::path::Path;
 /// if it exists.
 ///
 /// ```rust
-/// use reflink;
-/// match reflink::reflink("src.txt", "dest.txt") {
+/// match reflink_copy::reflink("src.txt", "dest.txt") {
 ///     Ok(()) => println!("file has been reflinked"),
 ///     Err(e) => println!("error while reflinking: {:?}", e)
 /// }
@@ -73,8 +72,7 @@ pub fn reflink(from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Result<()> {
 /// If the function copied a file, the return value will be `Ok(Some(written))`.
 ///
 /// ```rust
-/// use reflink;
-/// match reflink::reflink_or_copy("src.txt", "dest.txt") {
+/// match reflink_copy::reflink_or_copy("src.txt", "dest.txt") {
 ///     Ok(None) => println!("file has been reflinked"),
 ///     Ok(Some(written)) => println!("file has been copied ({} bytes)", written),
 ///     Err(e) => println!("an error occured: {:?}", e)

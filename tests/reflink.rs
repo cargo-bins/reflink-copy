@@ -3,7 +3,7 @@ use std::io;
 use std::path::Path;
 use tempfile::tempdir;
 
-use reflink::{reflink, reflink_or_copy};
+use reflink_copy::{reflink, reflink_or_copy};
 
 #[test]
 fn reflink_file_does_not_exist() {

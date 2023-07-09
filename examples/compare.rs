@@ -1,5 +1,3 @@
-use reflink;
-
 use std::fs;
 use std::io::{self, Read};
 use std::time::Instant;
@@ -10,7 +8,7 @@ fn main() {
     io::copy(&mut src, &mut base_file).unwrap();
 
     let before_reflink = Instant::now();
-    match reflink::reflink("base.txt", "reflinked.txt") {
+    match reflink_copy::reflink("base.txt", "reflinked.txt") {
         Ok(()) => {}
         Err(e) => {
             println!("Error during reflinking:\n{:?}", e);

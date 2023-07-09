@@ -49,15 +49,20 @@ use std::path::Path;
 /// untested and probably buggy. Contributions/testers with access to a Windows Server welcome.
 ///
 /// NOTE that it generates a temporary file and is not atomic.
-pub fn reflink<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> io::Result<()> {
-    let (from, to) = (from.as_ref(), to.as_ref());
-    if !from.is_file() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "the source path is not an existing regular file",
-        ));
+#[inline(always)]
+pub fn reflink(from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Result<()> {
+    fn inner(from: &Path, to: &Path) -> io::Result<()> {
+        if !from.is_file() {
+            Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "the source path is not an existing regular file",
+            ))
+        } else {
+            sys::reflink(from, to)
+        }
     }
-    sys::reflink(from, to)
+
+    inner(from.as_ref(), to.as_ref())
 }
 
 /// Attempts to reflink a file. If the operation fails, a conventional copy operation is
@@ -75,10 +80,15 @@ pub fn reflink<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> io::Result<()>
 ///     Err(e) => println!("an error occured: {:?}", e)
 /// }
 /// ```
-pub fn reflink_or_copy<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> io::Result<Option<u64>> {
-    if let Ok(()) = reflink(&from, &to) {
-        Ok(None)
-    } else {
-        fs::copy(from, to).map(Some)
+#[inline(always)]
+pub fn reflink_or_copy(from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Result<Option<u64>> {
+    fn inner(from: &Path, to: &Path) -> io::Result<Option<u64>> {
+        if let Ok(()) = reflink(from, to) {
+            Ok(None)
+        } else {
+            fs::copy(from, to).map(Some)
+        }
     }
+
+    inner(from.as_ref(), to.as_ref())
 }

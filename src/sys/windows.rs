@@ -1,21 +1,30 @@
 use std::{
     convert::TryInto,
+    ffi::c_void,
     fs::File,
     io,
     mem::{self, MaybeUninit},
     os::windows::fs::MetadataExt,
-    os::windows::io::{AsRawHandle, RawHandle},
+    os::windows::io::AsRawHandle,
     path::Path,
     ptr,
 };
 
-use winapi::um::{
-    fileapi::GetVolumeInformationByHandleW,
-    ioapiset::DeviceIoControl,
-    winioctl::{
-        FSCTL_GET_INTEGRITY_INFORMATION, FSCTL_SET_INTEGRITY_INFORMATION, FSCTL_SET_SPARSE,
+use windows::Win32::{
+    Foundation::HANDLE,
+    Storage::FileSystem::{
+        GetVolumeInformationByHandleW, FILE_ATTRIBUTE_SPARSE_FILE, FILE_FLAGS_AND_ATTRIBUTES,
     },
-    winnt::{FILE_ATTRIBUTE_SPARSE_FILE, FILE_SUPPORTS_BLOCK_REFCOUNTING},
+    System::{
+        Ioctl::{
+            DUPLICATE_EXTENTS_DATA, FSCTL_DUPLICATE_EXTENTS_TO_FILE,
+            FSCTL_GET_INTEGRITY_INFORMATION, FSCTL_GET_INTEGRITY_INFORMATION_BUFFER,
+            FSCTL_SET_INTEGRITY_INFORMATION, FSCTL_SET_INTEGRITY_INFORMATION_BUFFER,
+            FSCTL_SET_SPARSE,
+        },
+        SystemServices::FILE_SUPPORTS_BLOCK_REFCOUNTING,
+        IO::DeviceIoControl,
+    },
 };
 
 use super::utility::AutoRemovedFile;
@@ -26,7 +35,9 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
 
     let src_metadata = src.metadata()?;
     let src_file_size = src_metadata.file_size();
-    let src_is_sparse = (src_metadata.file_attributes() & FILE_ATTRIBUTE_SPARSE_FILE) != 0;
+    let src_is_sparse =
+        (FILE_FLAGS_AND_ATTRIBUTES(src_metadata.file_attributes()) & FILE_ATTRIBUTE_SPARSE_FILE).0
+            != 0;
 
     let dest = AutoRemovedFile::create_new(to)?;
 
@@ -44,7 +55,7 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
             ));
         }
         // Copy over integrity information. Not sure if this is required.
-        let mut dest_integrity_info = ffi::FSCTL_SET_INTEGRITY_INFORMATION_BUFFER {
+        let mut dest_integrity_info = FSCTL_SET_INTEGRITY_INFORMATION_BUFFER {
             ChecksumAlgorithm: src_integrity_info.ChecksumAlgorithm,
             Reserved: src_integrity_info.Reserved,
             Flags: src_integrity_info.Flags,
@@ -58,12 +69,6 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
     // This might very well result in us cloning past the file end.
     // Let's hope windows api sanitizes this, because otherwise a clean implementation is not really possible.
     dest.as_inner_file().set_len(src_file_size)?;
-
-    // Preparation done, now reflink
-    let mut dup_extent: MaybeUninit<ffi::DUPLICATE_EXTENTS_DATA> = MaybeUninit::uninit();
-    unsafe {
-        (*dup_extent.as_mut_ptr()).FileHandle = src.as_raw_handle();
-    }
 
     // We must end at a cluster boundary
     let total_copy_len: i64 = {
@@ -88,29 +93,29 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
             debug_assert_eq!(bytes_to_copy % cluster_size, 0);
             debug_assert_eq!(bytes_copied % cluster_size, 0);
         }
-        unsafe {
-            *(*dup_extent.as_mut_ptr()).SourceFileOffset.QuadPart_mut() = bytes_copied;
-            *(*dup_extent.as_mut_ptr()).TargetFileOffset.QuadPart_mut() = bytes_copied;
-            *(*dup_extent.as_mut_ptr()).ByteCount.QuadPart_mut() = bytes_to_copy;
-        }
-        let mut bytes_returned = 0u32;
-        let res = unsafe {
-            DeviceIoControl(
-                dest.as_raw_handle() as _,
-                ffi::FSCTL_DUPLICATE_EXTENTS_TO_FILE,
-                dup_extent.as_mut_ptr() as *mut _,
-                mem::size_of::<ffi::DUPLICATE_EXTENTS_DATA>()
-                    .try_into()
-                    .unwrap(),
-                ptr::null_mut(),
-                0,
-                &mut bytes_returned as *mut _,
-                ptr::null_mut(),
-            )
+
+        let mut dup_extent = DUPLICATE_EXTENTS_DATA {
+            FileHandle: src.as_handle(),
+
+            SourceFileOffset: bytes_copied,
+            TargetFileOffset: bytes_copied,
+            ByteCount: bytes_to_copy,
         };
-        if res == 0 {
-            return Err(io::Error::last_os_error());
+
+        let mut bytes_returned = 0u32;
+        unsafe {
+            DeviceIoControl(
+                dest.as_handle(),
+                FSCTL_DUPLICATE_EXTENTS_TO_FILE,
+                Some(&mut dup_extent as *mut _ as *mut c_void),
+                mem::size_of::<DUPLICATE_EXTENTS_DATA>().try_into().unwrap(),
+                None,
+                0,
+                Some(&mut bytes_returned as *mut _),
+                None,
+            )
         }
+        .ok()?;
         bytes_copied += bytes_to_copy;
     }
     dest.persist();
@@ -120,111 +125,100 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
 /// Additional functionality for windows files, needed for reflink
 trait FileExt {
     fn set_sparse(&self) -> io::Result<()>;
-    fn get_integrity_information(&self) -> io::Result<ffi::FSCTL_GET_INTEGRITY_INFORMATION_BUFFER>;
+    fn get_integrity_information(&self) -> io::Result<FSCTL_GET_INTEGRITY_INFORMATION_BUFFER>;
     fn set_integrity_information(
         &self,
-        integrity_info: &mut ffi::FSCTL_SET_INTEGRITY_INFORMATION_BUFFER,
+        integrity_info: &mut FSCTL_SET_INTEGRITY_INFORMATION_BUFFER,
     ) -> io::Result<()>;
     fn is_block_cloning_supported(&self) -> io::Result<bool>;
+
+    fn as_handle(&self) -> HANDLE;
 }
 
 impl FileExt for File {
     fn set_sparse(&self) -> io::Result<()> {
         let mut bytes_returned = 0u32;
-        let res = unsafe {
+        unsafe {
             DeviceIoControl(
-                self.as_raw_handle() as _,
+                self.as_handle(),
                 FSCTL_SET_SPARSE,
-                ptr::null_mut(),
+                None,
                 0,
-                ptr::null_mut(),
+                None,
                 0,
-                &mut bytes_returned as *mut _,
-                ptr::null_mut(),
+                Some(&mut bytes_returned as *mut _),
+                None,
             )
-        };
-        if res == 0 {
-            Err(io::Error::last_os_error())
-        } else {
-            Ok(())
         }
+        .ok()?;
+
+        Ok(())
     }
 
-    fn get_integrity_information(&self) -> io::Result<ffi::FSCTL_GET_INTEGRITY_INFORMATION_BUFFER> {
+    fn get_integrity_information(&self) -> io::Result<FSCTL_GET_INTEGRITY_INFORMATION_BUFFER> {
         let mut bytes_returned = 0u32;
+        let mut integrity_info: MaybeUninit<FSCTL_GET_INTEGRITY_INFORMATION_BUFFER> =
+            MaybeUninit::uninit();
+
         unsafe {
-            let mut integrity_info: MaybeUninit<ffi::FSCTL_GET_INTEGRITY_INFORMATION_BUFFER> =
-                MaybeUninit::uninit();
-            let res = DeviceIoControl(
-                self.as_raw_handle() as _,
+            DeviceIoControl(
+                self.as_handle(),
                 FSCTL_GET_INTEGRITY_INFORMATION,
-                ptr::null_mut(),
+                None,
                 0,
-                integrity_info.as_mut_ptr() as *mut _,
-                mem::size_of::<ffi::FSCTL_GET_INTEGRITY_INFORMATION_BUFFER>()
+                Some(integrity_info.as_mut_ptr() as *mut c_void),
+                mem::size_of::<FSCTL_GET_INTEGRITY_INFORMATION_BUFFER>()
                     .try_into()
                     .unwrap(),
-                &mut bytes_returned as *mut _,
-                ptr::null_mut(),
-            );
-            if res == 0 {
-                Err(io::Error::last_os_error())
-            } else {
-                Ok(unsafe { integrity_info.assume_init() })
-            }
+                Some(&mut bytes_returned as *mut _),
+                None,
+            )
+            .ok()?;
+
+            Ok(integrity_info.assume_init())
         }
     }
 
     fn set_integrity_information(
         &self,
-        integrity_info: &mut ffi::FSCTL_SET_INTEGRITY_INFORMATION_BUFFER,
+        integrity_info: &mut FSCTL_SET_INTEGRITY_INFORMATION_BUFFER,
     ) -> io::Result<()> {
-        let res = unsafe {
+        unsafe {
             DeviceIoControl(
-                self.as_raw_handle() as _,
+                self.as_handle(),
                 FSCTL_SET_INTEGRITY_INFORMATION,
-                integrity_info as *mut _ as *mut _,
-                mem::size_of::<ffi::FSCTL_SET_INTEGRITY_INFORMATION_BUFFER>()
+                Some(integrity_info as *mut _ as *mut c_void),
+                mem::size_of::<FSCTL_SET_INTEGRITY_INFORMATION_BUFFER>()
                     .try_into()
                     .unwrap(),
-                ptr::null_mut(),
+                None,
                 0,
-                ptr::null_mut(),
-                ptr::null_mut(),
+                None,
+                None,
             )
-        };
-        if res == 0 {
-            Err(io::Error::last_os_error())
-        } else {
-            Ok(())
         }
+        .ok()?;
+        Ok(())
     }
 
     fn is_block_cloning_supported(&self) -> io::Result<bool> {
         let mut flags = 0u32;
-        let res = unsafe {
+        unsafe {
             GetVolumeInformationByHandleW(
-                self.as_raw_handle() as _,
-                ptr::null_mut(),
-                0,
-                ptr::null_mut(),
-                ptr::null_mut(),
-                &mut flags as *mut _,
-                ptr::null_mut(),
-                0,
+                self.as_handle(),
+                None,
+                None,
+                None,
+                Some(&mut flags as *mut _),
+                None,
             )
-        };
-        if res == 0 {
-            Err(io::Error::last_os_error())
-        } else {
-            Ok((flags & FILE_SUPPORTS_BLOCK_REFCOUNTING) != 0)
         }
+        .ok()?;
+        Ok((flags & FILE_SUPPORTS_BLOCK_REFCOUNTING) != 0)
     }
-}
 
-impl AsRawHandle for AutoRemovedFile {
-    fn as_raw_handle(&self) -> RawHandle {
-        self.as_inner_file().as_raw_handle()
+    fn as_handle(&self) -> HANDLE {
+        HANDLE(unsafe { self.as_raw_handle().offset_from(ptr::null()) })
     }
 }
 
@@ -233,13 +227,13 @@ impl FileExt for AutoRemovedFile {
         self.as_inner_file().set_sparse()
     }
 
-    fn get_integrity_information(&self) -> io::Result<ffi::FSCTL_GET_INTEGRITY_INFORMATION_BUFFER> {
+    fn get_integrity_information(&self) -> io::Result<FSCTL_GET_INTEGRITY_INFORMATION_BUFFER> {
         self.as_inner_file().get_integrity_information()
     }
 
     fn set_integrity_information(
         &self,
-        integrity_info: &mut ffi::FSCTL_SET_INTEGRITY_INFORMATION_BUFFER,
+        integrity_info: &mut FSCTL_SET_INTEGRITY_INFORMATION_BUFFER,
     ) -> io::Result<()> {
         self.as_inner_file()
             .set_integrity_information(integrity_info)
@@ -247,6 +241,10 @@ impl FileExt for AutoRemovedFile {
 
     fn is_block_cloning_supported(&self) -> io::Result<bool> {
         self.as_inner_file().is_block_cloning_supported()
+    }
+
+    fn as_handle(&self) -> HANDLE {
+        self.as_inner_file().as_handle()
     }
 }
 
@@ -259,42 +257,4 @@ fn round_up(num_to_round: i64, multiple: i64) -> i64 {
     debug_assert!(multiple > 0);
     debug_assert_eq!((multiple & (multiple - 1)), 0);
     (num_to_round + multiple - 1) & -multiple
-}
-
-/// Contains definitions not included in winapi
-#[allow(non_snake_case)]
-mod ffi {
-    use std::os::windows::raw::HANDLE;
-    use winapi::shared::{
-        minwindef::{DWORD, WORD},
-        ntdef::LARGE_INTEGER,
-    };
-
-    pub const FSCTL_DUPLICATE_EXTENTS_TO_FILE: u32 = 0x98344;
-
-    #[derive(Debug)]
-    #[repr(C)]
-    pub struct FSCTL_GET_INTEGRITY_INFORMATION_BUFFER {
-        pub ChecksumAlgorithm: WORD,
-        pub Reserved: WORD,
-        pub Flags: DWORD,
-        pub ChecksumChunkSizeInBytes: DWORD,
-        pub ClusterSizeInBytes: DWORD,
-    }
-
-    #[derive(Debug)]
-    #[repr(C)]
-    pub struct FSCTL_SET_INTEGRITY_INFORMATION_BUFFER {
-        pub ChecksumAlgorithm: WORD,
-        pub Reserved: WORD,
-        pub Flags: DWORD,
-    }
-
-    #[repr(C)]
-    pub struct DUPLICATE_EXTENTS_DATA {
-        pub FileHandle: HANDLE,
-        pub SourceFileOffset: LARGE_INTEGER,
-        pub TargetFileOffset: LARGE_INTEGER,
-        pub ByteCount: LARGE_INTEGER,
-    }
 }

@@ -10,7 +10,7 @@ fn reflink_file_does_not_exist() {
     let from = Path::new("test/nonexistent-bogus-path");
     let to = Path::new("test/other-bogus-path");
 
-    match reflink(&from, &to) {
+    match reflink(from, to) {
         Ok(..) => panic!(),
         Err(..) => {
             assert!(!from.exists());
@@ -26,7 +26,7 @@ fn reflink_src_does_not_exist() {
     let to = tmpdir.path().join("out.txt");
 
     fs::write(&to, b"hello").unwrap();
-    assert!(reflink(&from, &to).is_err());
+    assert!(reflink(from, &to).is_err());
 
     assert!(!from.exists());
     assert_eq!(fs::read(&to).unwrap(), b"hello");
@@ -53,7 +53,7 @@ fn reflink_src_is_dir() {
     let dir = tempdir().unwrap();
     let dest_file_path = dir.path().join("dest.txt");
 
-    match reflink(dir.path(), &dest_file_path) {
+    match reflink(dir.path(), dest_file_path) {
         Ok(()) => panic!(),
         Err(e) => {
             println!("{:?}", e);

@@ -7,12 +7,12 @@ mod utility;
 cfg_if! {
     if #[cfg(unix)] {
         mod unix;
-        pub use unix::reflink;
+        pub use self::unix::reflink;
     } else if #[cfg(windows)] {
-        mod windows;
-        pub use windows::reflink;
+        mod windows_impl;
+        pub use self::windows_impl::reflink;
     } else {
-        use reflink_not_supported as reflink;
+        use self::reflink_not_supported as reflink;
     }
 }
 

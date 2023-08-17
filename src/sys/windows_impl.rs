@@ -114,8 +114,7 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
                 Some(&mut bytes_returned as *mut _),
                 None,
             )
-        }
-        .ok()?;
+        }?;
         bytes_copied += bytes_to_copy;
     }
     dest.persist();
@@ -149,8 +148,7 @@ impl FileExt for File {
                 Some(&mut bytes_returned as *mut _),
                 None,
             )
-        }
-        .ok()?;
+        }?;
 
         Ok(())
     }
@@ -172,8 +170,7 @@ impl FileExt for File {
                     .unwrap(),
                 Some(&mut bytes_returned as *mut _),
                 None,
-            )
-            .ok()?;
+            )?;
 
             Ok(integrity_info.assume_init())
         }
@@ -196,8 +193,7 @@ impl FileExt for File {
                 None,
                 None,
             )
-        }
-        .ok()?;
+        }?;
         Ok(())
     }
 
@@ -212,8 +208,7 @@ impl FileExt for File {
                 Some(&mut flags as *mut _),
                 None,
             )
-        }
-        .ok()?;
+        }?;
         Ok((flags & FILE_SUPPORTS_BLOCK_REFCOUNTING) != 0)
     }
 

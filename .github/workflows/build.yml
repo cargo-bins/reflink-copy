@@ -72,3 +72,20 @@ jobs:
     - name: Build for aarch64-apple-darwin
       if: ${{ matrix.target == 'aarch64-apple-darwin' }}
       run: cargo build --target ${{ matrix.target }}
+
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v4
+    - uses: Swatinem/rust-cache@v2
+
+    - name: Clipppy
+      run: cargo clippy --no-deps
+
+    - name: Format
+      run: cargo fmt --all --check

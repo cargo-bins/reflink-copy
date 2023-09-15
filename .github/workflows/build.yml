@@ -38,12 +38,6 @@ jobs:
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
             use-cross: true
-          - target: aarch64-linux-android
-            os: ubuntu-latest
-            use-cross: true
-          - target: armv7-linux-androideabi
-            os: ubuntu-latest
-            use-cross: true
 
     runs-on: ${{ matrix.os }}
     name: ${{ matrix.target }}
@@ -81,6 +75,25 @@ jobs:
     - name: Build for aarch64-apple-darwin
       if: ${{ matrix.target == 'aarch64-apple-darwin' }}
       run: cargo build --target ${{ matrix.target }}
+
+  cross-check:
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [aarch64-linux-android, armv7-linux-androideabi]
+
+    env:
+      CARGO_BUILD_TARGET: ${{ matrix.target }}
+
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install rustup target
+      run: rustup target add ${{ matrix.target }}
+    - uses: Swatinem/rust-cache@v2
+
+    - name: Cross check
+      run: cargo check --target ${{ matrix.target }}
 
   check:
     strategy:

@@ -31,7 +31,7 @@ use super::utility::AutoRemovedFile;
 
 pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
     // Inspired by https://github.com/0xbadfca11/reflink/blob/master/reflink.cpp
-    let src = File::open(&from)?;
+    let src = File::open(from)?;
 
     let src_metadata = src.metadata()?;
     let src_file_size = src_metadata.file_size();

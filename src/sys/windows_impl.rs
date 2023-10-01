@@ -62,8 +62,7 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
         };
 
         // ignore the error if it fails, the clone will still work
-        if let Err(_e) = dest.set_integrity_information(&mut dest_integrity_info) {
-        }
+        if let Err(_e) = dest.set_integrity_information(&mut dest_integrity_info) {}
     }
 
     // file_size must be sufficient to hold the data.

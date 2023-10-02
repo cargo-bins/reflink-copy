@@ -6,8 +6,13 @@
 //! This library exposes a single function, `reflink`, which attempts to copy a file using the
 //! underlying OSs' block cloning capabilities. The function signature is identical to `std::fs::copy`.
 //!
-//! At the moment Linux, Android, OSX, ios and Windows are supported.
-//! As soon as other OS support the functionality, support will be added.
+//! At the moment Linux, Android, OSX, iOS, and Windows are supported.
+//!
+//! Note: On Windows, the integrity information features are only available on Windows Server editions
+//! starting from Windows Server 2012. Client versions of Windows do not support these features.
+//! [More Information](https://learn.microsoft.com/en-us/windows/win32/api/winioctl/ni-winioctl-fsctl_set_integrity_information)
+//!
+//! As soon as other OSes support the functionality, support will be added.
 
 mod sys;
 
@@ -17,7 +22,7 @@ use std::path::Path;
 
 /// Copies a file using COW semantics.
 ///
-/// For compatibility reasons with macos, the target file will be created using `OpenOptions::create_new`.
+/// For compatibility reasons with macOS, the target file will be created using `OpenOptions::create_new`.
 /// If you want to overwrite existing files, make sure you manually delete the target file first
 /// if it exists.
 ///
@@ -35,7 +40,7 @@ use std::path::Path;
 /// Uses `ioctl_ficlone`. Supported file systems include btrfs and XFS (and maybe more in the future).
 /// NOTE that it generates a temporary file and is not atomic.
 ///
-/// ## OS X / ios
+/// ## OS X / iOS
 ///
 /// Uses `clonefile` library function. This is supported on OS X Version >=10.12 and iOS version >= 10.0
 /// This will work on APFS partitions (which means most desktop systems are capable).
@@ -44,8 +49,9 @@ use std::path::Path;
 ///
 /// Uses ioctl `FSCTL_DUPLICATE_EXTENTS_TO_FILE`.
 ///
-/// Only supports ReFS on Windows Server. *Important note*: The windows implementation is currently
-/// untested and probably buggy. Contributions/testers with access to a Windows Server welcome.
+/// Supports ReFS on Windows Server and Windows Dev Drives. *Important note*: The windows implementation is currently
+/// untested and probably buggy. Contributions/testers with access to a Windows Server or Dev Drives are welcome.
+/// [More Information on Dev Drives](https://learn.microsoft.com/en-US/windows/dev-drive/#how-does-dev-drive-work)
 ///
 /// NOTE that it generates a temporary file and is not atomic.
 #[inline(always)]

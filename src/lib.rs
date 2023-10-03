@@ -58,21 +58,17 @@ use std::path::Path;
 pub fn reflink(from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Result<()> {
     #[cfg_attr(feature = "tracing", tracing_attributes::instrument(name = "reflink"))]
     fn inner(from: &Path, to: &Path) -> io::Result<()> {
-        reflink_inner(from, to)
+        if !from.is_file() {
+            Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "the source path is not an existing regular file",
+            ))
+        } else {
+            sys::reflink(from, to)
+        }
     }
 
     inner(from.as_ref(), to.as_ref())
-}
-
-fn reflink_inner(from: &Path, to: &Path) -> io::Result<()> {
-    if !from.is_file() {
-        Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "the source path is not an existing regular file",
-        ))
-    } else {
-        sys::reflink(from, to)
-    }
 }
 
 /// Attempts to reflink a file. If the operation fails, a conventional copy operation is
@@ -96,7 +92,12 @@ pub fn reflink_or_copy(from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Resu
         tracing_attributes::instrument(name = "reflink_or_copy")
     )]
     fn inner(from: &Path, to: &Path) -> io::Result<Option<u64>> {
-        if let Err(_err) = reflink_inner(from, to) {
+        if !from.is_file() {
+            Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "the source path is not an existing regular file",
+            ))
+        } else if let Err(_err) = sys::reflink(from, to) {
             #[cfg(feature = "tracing")]
             tracing::warn!(?_err, "Failed to reflink, fallback to fs::copy");
 

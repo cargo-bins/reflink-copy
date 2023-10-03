@@ -105,3 +105,6 @@ jobs:
 
     - name: Format
       run: cargo fmt --all --check
+
+    - name: Check features
+      run: cargo check --all-features

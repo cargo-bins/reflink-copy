@@ -4,8 +4,7 @@ use std::{
     fs::File,
     io,
     mem::{self, MaybeUninit},
-    os::windows::fs::MetadataExt,
-    os::windows::io::AsRawHandle,
+    os::windows::{fs::MetadataExt, io::AsRawHandle},
     path::Path,
     ptr,
 };
@@ -62,7 +61,13 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
         };
 
         // ignore the error if it fails, the clone will still work
-        if let Err(_e) = dest.set_integrity_information(&mut dest_integrity_info) {}
+        if let Err(_e) = dest.set_integrity_information(&mut dest_integrity_info) {
+            #[cfg(feature = "tracing")]
+            tracing::warn!(
+                ?_e,
+                "Failed to set integrity information (probably on DevDriver), but the clone still works"
+            );
+        }
     }
 
     // file_size must be sufficient to hold the data.

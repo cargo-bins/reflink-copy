@@ -44,7 +44,14 @@ impl AutoRemovedFile {
 impl Drop for AutoRemovedFile {
     fn drop(&mut self) {
         if self.inner.is_some() {
-            let _ = remove_file(&self.path);
+            if let Err(_err) = remove_file(&self.path) {
+                #[cfg(feature = "tracing")]
+                tracing::warn!(
+                    ?_err,
+                    "Failed to remove dest file {} on cleanup (failed to reflink)",
+                    self.path.display(),
+                );
+            }
         }
     }
 }

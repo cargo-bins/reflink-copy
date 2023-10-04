@@ -106,7 +106,7 @@ dependencies = [
 
 [[package]]
 name = "reflink-copy"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "cfg-if",
  "ioctl-sys",

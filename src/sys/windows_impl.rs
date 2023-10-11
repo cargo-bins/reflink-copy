@@ -40,6 +40,21 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
 
     let dest = AutoRemovedFile::create_new(to)?;
 
+    // Set the destination file as sparse
+    let mut bytes_returned = 0u32;
+    unsafe {
+        DeviceIoControl(
+            dest.as_handle(),
+            FSCTL_SET_SPARSE,
+            None,
+            0,
+            None,
+            0,
+            Some(&mut bytes_returned as *mut _),
+            None,
+        )
+    }?;
+
     if src_is_sparse {
         dest.set_sparse()?;
     }
@@ -124,6 +139,7 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
         }?;
         bytes_copied += bytes_to_copy;
     }
+
     dest.persist();
     Ok(())
 }

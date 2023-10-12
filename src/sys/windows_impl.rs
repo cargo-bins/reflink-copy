@@ -12,7 +12,7 @@ use std::{
 use windows::Win32::{
     Foundation::HANDLE,
     Storage::FileSystem::{
-        GetVolumeInformationByHandleW, FILE_ATTRIBUTE_SPARSE_FILE, FILE_FLAGS_AND_ATTRIBUTES,
+        GetVolumeInformationByHandleW, FILE_ATTRIBUTE_SPARSE_FILE, FILE_FLAGS_AND_ATTRIBUTES, FILE_BASIC_INFO, SetFileInformationByHandle, FileBasicInfo,
     },
     System::{
         Ioctl::{
@@ -40,24 +40,7 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
 
     let dest = AutoRemovedFile::create_new(to)?;
 
-    // Set the destination file as sparse
-    let mut bytes_returned = 0u32;
-    unsafe {
-        DeviceIoControl(
-            dest.as_handle(),
-            FSCTL_SET_SPARSE,
-            None,
-            0,
-            None,
-            0,
-            Some(&mut bytes_returned as *mut _),
-            None,
-        )
-    }?;
-
-    if src_is_sparse {
-        dest.set_sparse()?;
-    }
+    dest.set_sparse()?;
 
     let src_integrity_info = src.get_integrity_information()?;
     let cluster_size: i64 = src_integrity_info.ClusterSizeInBytes.try_into().unwrap();
@@ -140,6 +123,10 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
         bytes_copied += bytes_to_copy;
     }
 
+    if !src_is_sparse {
+        dest.unset_sparse()?;
+    }
+
     dest.persist();
     Ok(())
 }
@@ -147,6 +134,7 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
 /// Additional functionality for windows files, needed for reflink
 trait FileExt {
     fn set_sparse(&self) -> io::Result<()>;
+    fn unset_sparse(&self) -> io::Result<()>;
     fn get_integrity_information(&self) -> io::Result<FSCTL_GET_INTEGRITY_INFORMATION_BUFFER>;
     fn set_integrity_information(
         &self,
@@ -159,17 +147,31 @@ trait FileExt {
 
 impl FileExt for File {
     fn set_sparse(&self) -> io::Result<()> {
-        let mut bytes_returned = 0u32;
+        let mut info: FILE_BASIC_INFO = unsafe { mem::zeroed() };
+        info.FileAttributes = FILE_ATTRIBUTE_SPARSE_FILE.0;
+
         unsafe {
-            DeviceIoControl(
-                self.as_handle(),
-                FSCTL_SET_SPARSE,
-                None,
-                0,
-                None,
-                0,
-                Some(&mut bytes_returned as *mut _),
-                None,
+            SetFileInformationByHandle(
+                HANDLE(self.as_raw_handle() as isize),
+                FileBasicInfo,
+                &mut info as *mut FILE_BASIC_INFO as *mut c_void,
+                mem::size_of::<FILE_BASIC_INFO>().try_into().unwrap(),
+            )
+        }?;
+
+        Ok(())
+    }
+
+    fn unset_sparse(&self) -> io::Result<()> {
+        let mut info: FILE_BASIC_INFO = unsafe { mem::zeroed() };
+        info.FileAttributes = 0;
+
+        unsafe {
+            SetFileInformationByHandle(
+                HANDLE(self.as_raw_handle() as isize),
+                FileBasicInfo,
+                &mut info as *mut FILE_BASIC_INFO as *mut c_void,
+                mem::size_of::<FILE_BASIC_INFO>().try_into().unwrap(),
             )
         }?;
 
@@ -243,6 +245,10 @@ impl FileExt for File {
 impl FileExt for AutoRemovedFile {
     fn set_sparse(&self) -> io::Result<()> {
         self.as_inner_file().set_sparse()
+    }
+
+    fn unset_sparse(&self) -> io::Result<()> {
+        self.as_inner_file().unset_sparse()
     }
 
     fn get_integrity_information(&self) -> io::Result<FSCTL_GET_INTEGRITY_INFORMATION_BUFFER> {

@@ -166,8 +166,13 @@ impl FileExt for File {
     }
 
     fn unset_sparse(&self) -> io::Result<()> {
-        let mut info: FILE_BASIC_INFO = unsafe { mem::zeroed() };
-        info.FileAttributes = 0;
+        let mut info = FILE_BASIC_INFO {
+            CreationTime: 0,
+            LastAccessTime: 0,
+            LastWriteTime: 0,
+            ChangeTime: 0,
+            FileAttributes: 0,
+        };
 
         unsafe {
             SetFileInformationByHandle(

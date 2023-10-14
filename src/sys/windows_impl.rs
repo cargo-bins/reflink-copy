@@ -41,6 +41,9 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
 
     let dest = AutoRemovedFile::create_new(to)?;
 
+    // Set the destination to be sparse while we clone.
+    // Important to avoid allocating zero-backed real storage when cloning
+    // below which will just be released when cloning file extents.
     dest.set_sparse()?;
 
     let src_integrity_info = src.get_integrity_information()?;

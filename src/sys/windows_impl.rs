@@ -179,7 +179,7 @@ impl FileExt for File {
 
         unsafe {
             SetFileInformationByHandle(
-                HANDLE(self.as_raw_handle() as isize),
+                self.as_handle(),
                 FileBasicInfo,
                 &mut info as *mut FILE_BASIC_INFO as *mut c_void,
                 mem::size_of::<FILE_BASIC_INFO>().try_into().unwrap(),

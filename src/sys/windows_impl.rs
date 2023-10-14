@@ -12,7 +12,8 @@ use std::{
 use windows::Win32::{
     Foundation::HANDLE,
     Storage::FileSystem::{
-        GetVolumeInformationByHandleW, FILE_ATTRIBUTE_SPARSE_FILE, FILE_FLAGS_AND_ATTRIBUTES, FILE_BASIC_INFO, SetFileInformationByHandle, FileBasicInfo,
+        FileBasicInfo, GetVolumeInformationByHandleW, SetFileInformationByHandle,
+        FILE_ATTRIBUTE_SPARSE_FILE, FILE_BASIC_INFO, FILE_FLAGS_AND_ATTRIBUTES,
     },
     System::{
         Ioctl::{

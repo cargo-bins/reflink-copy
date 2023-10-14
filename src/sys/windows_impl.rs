@@ -148,15 +148,17 @@ trait FileExt {
 
 impl FileExt for File {
     fn set_sparse(&self) -> io::Result<()> {
-        let mut info: FILE_BASIC_INFO = unsafe { mem::zeroed() };
-        info.FileAttributes = FILE_ATTRIBUTE_SPARSE_FILE.0;
-
+        let mut bytes_returned = 0u32;
         unsafe {
-            SetFileInformationByHandle(
-                HANDLE(self.as_raw_handle() as isize),
-                FileBasicInfo,
-                &mut info as *mut FILE_BASIC_INFO as *mut c_void,
-                mem::size_of::<FILE_BASIC_INFO>().try_into().unwrap(),
+            DeviceIoControl(
+                self.as_handle(),
+                FSCTL_SET_SPARSE,
+                None,
+                0,
+                None,
+                0,
+                Some(&mut bytes_returned as *mut _),
+                None,
             )
         }?;
 

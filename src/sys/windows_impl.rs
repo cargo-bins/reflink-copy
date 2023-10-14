@@ -12,8 +12,7 @@ use std::{
 use windows::Win32::{
     Foundation::HANDLE,
     Storage::FileSystem::{
-        FileBasicInfo, GetVolumeInformationByHandleW, SetFileInformationByHandle,
-        FILE_ATTRIBUTE_SPARSE_FILE, FILE_BASIC_INFO, FILE_FLAGS_AND_ATTRIBUTES,
+        GetVolumeInformationByHandleW, FILE_ATTRIBUTE_SPARSE_FILE, FILE_FLAGS_AND_ATTRIBUTES,
     },
     System::{
         Ioctl::{
@@ -169,20 +168,19 @@ impl FileExt for File {
     }
 
     fn unset_sparse(&self) -> io::Result<()> {
-        let mut info = FILE_BASIC_INFO {
-            CreationTime: 0,
-            LastAccessTime: 0,
-            LastWriteTime: 0,
-            ChangeTime: 0,
-            FileAttributes: 0,
-        };
+        let mut bytes_returned = 0u32;
+        let mut sparse_flag: u32 = 0;
 
         unsafe {
-            SetFileInformationByHandle(
+            DeviceIoControl(
                 self.as_handle(),
-                FileBasicInfo,
-                &mut info as *mut FILE_BASIC_INFO as *mut c_void,
-                mem::size_of::<FILE_BASIC_INFO>().try_into().unwrap(),
+                FSCTL_SET_SPARSE,
+                Some(&mut sparse_flag as *mut _ as *mut c_void),
+                mem::size_of::<u32>() as u32,
+                None,
+                0,
+                Some(&mut bytes_returned as *mut _),
+                None,
             )
         }?;
 

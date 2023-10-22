@@ -7,7 +7,7 @@ use std::{
 };
 
 #[cfg(unix)]
-use std::os::unix::io::{AsFd, BorrowedFd, AsRawFd, RawFd};
+use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, RawFd};
 
 #[derive(Debug)]
 pub(super) struct AutoRemovedFile {

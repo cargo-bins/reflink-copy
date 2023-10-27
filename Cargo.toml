@@ -18,7 +18,7 @@ tracing = { version = "0.1.37", default-features = false, optional = true }
 tracing-attributes = { version = "0.1.26", optional = true }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies.rustix]
-version = "0.38.20"
+version = "0.38.21"
 default-features = false
 features = ["fs", "std"]
 

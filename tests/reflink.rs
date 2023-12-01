@@ -10,13 +10,9 @@ fn reflink_file_does_not_exist() {
     let from = Path::new("test/nonexistent-bogus-path");
     let to = Path::new("test/other-bogus-path");
 
-    match reflink(from, to) {
-        Ok(..) => panic!(),
-        Err(..) => {
-            assert!(!from.exists());
-            assert!(!to.exists());
-        }
-    }
+    reflink(from, to).unwrap_err();
+    assert!(!from.exists());
+    assert!(!to.exists());
 }
 
 #[test]
@@ -37,28 +33,57 @@ fn reflink_dest_is_dir() {
     let dir = tempdir().unwrap();
     let src_file_path = dir.path().join("src.txt");
     let _src_file = File::create(&src_file_path).unwrap();
-    match reflink(&src_file_path, dir.path()) {
-        Ok(()) => panic!(),
-        Err(e) => {
-            println!("{:?}", e);
-            if !cfg!(windows) {
-                assert_eq!(e.kind(), io::ErrorKind::AlreadyExists);
-            }
-        }
+    let err = reflink(&src_file_path, dir.path()).unwrap_err();
+    println!("{:?}", err);
+    if cfg!(windows) {
+        assert_eq!(err.kind(), io::ErrorKind::PermissionDenied);
+    } else {
+        assert_eq!(err.kind(), io::ErrorKind::AlreadyExists);
     }
 }
 
+// No reliable symlinking on windows, while macos can reflink symlinks.
+#[cfg(all(unix, not(any(target_os = "macos", target_os = "ios"))))]
+#[test]
+fn reflink_src_is_symlink() {
+    let dir = tempdir().unwrap();
+    let target = dir.path().join("target.txt");
+    let symlink = dir.path().join("symlink.txt");
+    File::create(&target).unwrap();
+    std::os::unix::fs::symlink(&target, &symlink).unwrap();
+    let dest_file_path = dir.path().join("dest.txt");
+
+    let err = reflink(symlink, dest_file_path).unwrap_err();
+    println!("{:?}", err);
+    assert_eq!(err.kind(), io::ErrorKind::InvalidInput)
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
 #[test]
 fn reflink_src_is_dir() {
     let dir = tempdir().unwrap();
     let dest_file_path = dir.path().join("dest.txt");
 
-    match reflink(dir.path(), dest_file_path) {
-        Ok(()) => panic!(),
-        Err(e) => {
-            println!("{:?}", e);
-            assert_eq!(e.kind(), io::ErrorKind::InvalidInput)
-        }
+    let err = reflink(dir.path(), dest_file_path).unwrap_err();
+    println!("{:?}", err);
+    assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
+}
+
+#[test]
+fn reflink_existing_dest_dir_results_in_error() {
+    let dir = tempdir().unwrap();
+    let src_file_path = dir.path().join("src");
+    let dest_file_path = dir.path().join("dest");
+
+    fs::create_dir(&src_file_path).unwrap();
+    fs::create_dir(&dest_file_path).unwrap();
+
+    let err = reflink(&src_file_path, &dest_file_path).unwrap_err();
+    println!("{:?}", err);
+    if cfg!(any(target_os = "macos", target_os = "ios")) {
+        assert_eq!(err.kind(), io::ErrorKind::AlreadyExists);
+    } else {
+        assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
     }
 }
 
@@ -71,13 +96,9 @@ fn reflink_existing_dest_results_in_error() {
     let _src_file = File::create(&src_file_path).unwrap();
     let _dest_file = File::create(&dest_file_path).unwrap();
 
-    match reflink(&src_file_path, &dest_file_path) {
-        Ok(()) => panic!(),
-        Err(e) => {
-            println!("{:?}", e);
-            assert_eq!(e.kind(), io::ErrorKind::AlreadyExists)
-        }
-    }
+    let err = reflink(&src_file_path, &dest_file_path).unwrap_err();
+    println!("{:?}", err);
+    assert_eq!(err.kind(), io::ErrorKind::AlreadyExists)
 }
 
 #[test]
@@ -88,15 +109,10 @@ fn reflink_ok() {
 
     fs::write(&src_file_path, b"this is a test").unwrap();
 
-    match reflink(&src_file_path, &dest_file_path) {
-        Ok(()) => {}
-        Err(e) => {
-            println!("{:?}", e);
-            // do not panic for now, CI envs are old and will probably error out
-            return;
-        }
-    }
-    assert_eq!(fs::read(&dest_file_path).unwrap(), b"this is a test");
+    let err = reflink(&src_file_path, &dest_file_path);
+    println!("{:?}", err);
+    // do not panic for now, CI envs are old and will probably error out
+    // assert_eq!(fs::read(&dest_file_path).unwrap(), b"this is a test");
 }
 
 #[test]

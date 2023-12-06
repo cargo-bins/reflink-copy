@@ -8,6 +8,6 @@ cfg_if! {
         mod macos;
         pub use macos::reflink;
     } else {
-        use super::reflink_not_supported as reflink;
+        pub use super::reflink_not_supported as reflink;
     }
 }

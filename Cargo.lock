@@ -100,7 +100,7 @@ dependencies = [
 
 [[package]]
 name = "reflink-copy"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "cfg-if",
  "rustix",

@@ -131,3 +131,24 @@ jobs:
     - uses: Swatinem/rust-cache@v2
 
     - run: cargo check --all-features
+
+  cross-check-unsupported-platform:
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [x86_64-unknown-illumos]
+
+    env:
+      CARGO_BUILD_TARGET: ${{ matrix.target }}
+
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install rustup target
+      run: |
+        rustup toolchain install --profile minimal nightly
+
+    - uses: Swatinem/rust-cache@v2
+
+    - name: Cross check
+      run: cargo +nightly check --target ${{ matrix.target }} -Zbuild-std

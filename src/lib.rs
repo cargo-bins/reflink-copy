@@ -66,8 +66,12 @@ pub fn reflink(from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Result<()> {
             //
             // According to https://www.manpagez.com/man/2/clonefile/, Macos otoh can reflink files,
             // directories and symlinks, so the original error is fine.
-            if !cfg!(any(target_os = "macos", target_os = "ios"))
-                && !fs::symlink_metadata(from).map_or(false, |m| m.is_file())
+            if !cfg!(any(
+                target_os = "macos",
+                target_os = "ios",
+                target_os = "tvos",
+                target_os = "watchos"
+            )) && !fs::symlink_metadata(from).map_or(false, |m| m.is_file())
             {
                 io::Error::new(
                     io::ErrorKind::InvalidInput,

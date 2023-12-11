@@ -43,7 +43,15 @@ fn reflink_dest_is_dir() {
 }
 
 // No reliable symlinking on windows, while macos can reflink symlinks.
-#[cfg(all(unix, not(any(target_os = "macos", target_os = "ios"))))]
+#[cfg(all(
+    unix,
+    not(any(
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "tvos",
+        target_os = "watchos"
+    ))
+))]
 #[test]
 fn reflink_src_is_symlink() {
     let dir = tempdir().unwrap();
@@ -58,7 +66,12 @@ fn reflink_src_is_symlink() {
     assert_eq!(err.kind(), io::ErrorKind::InvalidInput)
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "ios")))]
+#[cfg(not(any(
+    target_os = "macos",
+    target_os = "ios",
+    target_os = "tvos",
+    target_os = "watchos"
+)))]
 #[test]
 fn reflink_src_is_dir() {
     let dir = tempdir().unwrap();

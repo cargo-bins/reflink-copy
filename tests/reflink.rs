@@ -93,7 +93,12 @@ fn reflink_existing_dest_dir_results_in_error() {
 
     let err = reflink(&src_file_path, &dest_file_path).unwrap_err();
     println!("{:?}", err);
-    if cfg!(any(target_os = "macos", target_os = "ios")) {
+    if cfg!(any(
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "tvos",
+        target_os = "watchos"
+    )) {
         assert_eq!(err.kind(), io::ErrorKind::AlreadyExists);
     } else {
         assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
@@ -122,7 +127,7 @@ fn reflink_ok() {
 
     fs::write(&src_file_path, b"this is a test").unwrap();
 
-    let err = reflink(&src_file_path, &dest_file_path);
+    let err = reflink(&src_file_path, dest_file_path);
     println!("{:?}", err);
     // do not panic for now, CI envs are old and will probably error out
     // assert_eq!(fs::read(&dest_file_path).unwrap(), b"this is a test");

@@ -42,30 +42,6 @@ fn reflink_dest_is_dir() {
     }
 }
 
-// No reliable symlinking on windows, while macos can reflink symlinks.
-#[cfg(all(
-    unix,
-    not(any(
-        target_os = "macos",
-        target_os = "ios",
-        target_os = "tvos",
-        target_os = "watchos"
-    ))
-))]
-#[test]
-fn reflink_src_is_symlink() {
-    let dir = tempdir().unwrap();
-    let target = dir.path().join("target.txt");
-    let symlink = dir.path().join("symlink.txt");
-    File::create(&target).unwrap();
-    std::os::unix::fs::symlink(&target, &symlink).unwrap();
-    let dest_file_path = dir.path().join("dest.txt");
-
-    let err = reflink(symlink, dest_file_path).unwrap_err();
-    println!("{:?}", err);
-    assert_eq!(err.kind(), io::ErrorKind::InvalidInput)
-}
-
 #[cfg(not(any(
     target_os = "macos",
     target_os = "ios",

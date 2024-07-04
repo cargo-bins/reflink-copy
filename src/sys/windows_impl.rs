@@ -247,7 +247,7 @@ impl FileExt for File {
     }
 
     fn as_handle(&self) -> HANDLE {
-        HANDLE(unsafe { self.as_raw_handle().offset_from(ptr::null()) })
+        HANDLE(self.as_raw_handle())
     }
 }
 

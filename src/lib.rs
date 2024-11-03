@@ -18,6 +18,7 @@ mod sys;
 
 use std::fs;
 use std::io;
+use std::io::ErrorKind;
 use std::path::Path;
 
 /// Copies a file using COW semantics.
@@ -93,6 +94,8 @@ pub fn reflink(from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Result<()> {
 ///
 /// If the function copied a file, the return value will be `Ok(Some(written))`.
 ///
+/// If target file already exists, operation fails with [`ErrorKind::AlreadyExists`].
+///
 /// ```rust
 /// match reflink_copy::reflink_or_copy("src.txt", "dest.txt") {
 ///     Ok(None) => println!("file has been reflinked"),
@@ -116,13 +119,20 @@ pub fn reflink_or_copy(from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Resu
         tracing_attributes::instrument(name = "reflink_or_copy")
     )]
     fn inner(from: &Path, to: &Path) -> io::Result<Option<u64>> {
-        if let Err(_err) = sys::reflink(from, to) {
+        if let Err(err) = sys::reflink(from, to) {
+            match err.kind() {
+                ErrorKind::NotFound | ErrorKind::PermissionDenied | ErrorKind::AlreadyExists => {
+                    return Err(err);
+                }
+                _ => {}
+            }
+
             #[cfg(feature = "tracing")]
-            tracing::warn!(?_err, "Failed to reflink, fallback to fs::copy");
+            tracing::warn!(?err, "Failed to reflink, fallback to fs::copy");
 
             fs::copy(from, to).map(Some).map_err(|err| {
                 // Both regular files and symlinks to regular files can be copied, so unlike
-                // `reflink` we don't want to report invalid input on both files and and symlinks
+                // `reflink` we don't want to report invalid input on both files and symlinks
                 if from.is_file() {
                     err
                 } else {

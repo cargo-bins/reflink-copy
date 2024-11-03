@@ -1,6 +1,6 @@
 // cargo run --example clonefile V:\file.bin V:\file-clone.bin
 
-fn main() -> std::io::Result<()>{
+fn main() -> std::io::Result<()> {
     let args: Vec<_> = std::env::args().collect();
     if args.len() < 3 {
         eprintln!("Usage: {} <source_file> <target_file>", args[0]);

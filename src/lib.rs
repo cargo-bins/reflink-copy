@@ -155,18 +155,17 @@ pub fn reflink_or_copy(from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Resu
 /// reflink.
 ///
 /// > Note: Currently the function works only for windows. It returns `Ok(ReflinkSupport::Unknown)`
-/// for any other platform.
+/// > for any other platform.
 ///
 /// # Example
 /// ```
 /// let support = reflink_copy::check_reflink_support("C:\\path\\to\\file", "C:\\path\\to\\another_file")?;
 /// let support = reflink_copy::check_reflink_support("path\\to\\folder", "path\\to\\another_folder")?;
 /// ```
-pub fn check_reflink_support<P, Q>(from: P, to: Q) -> io::Result<ReflinkSupport>
-where
-    P: AsRef<Path>,
-    Q: AsRef<Path>,
-{
+pub fn check_reflink_support(
+    from: impl AsRef<Path>,
+    to: impl AsRef<Path>,
+) -> io::Result<ReflinkSupport> {
     if cfg!(target_os = "windows") {
         sys::check_reflink_support(from, to)
     } else {

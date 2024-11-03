@@ -1,13 +1,13 @@
 use super::utility::AutoRemovedFile;
 use crate::ReflinkSupport;
-use std::os::windows::ffi::OsStrExt;
+
 use std::{
     convert::TryInto,
     ffi::c_void,
     fs::File,
     io,
     mem::{self, MaybeUninit},
-    os::windows::{fs::MetadataExt, io::AsRawHandle},
+    os::windows::{ffi::OsStrExt, fs::MetadataExt, io::AsRawHandle},
     path::Path,
 };
 
@@ -298,11 +298,10 @@ fn round_up(num_to_round: i64, multiple: i64) -> i64 {
 ///
 /// This function verifies that both paths are on the same volume and that the filesystem supports
 /// reflink.
-pub fn check_reflink_support<P, Q>(from: P, to: Q) -> io::Result<ReflinkSupport>
-where
-    P: AsRef<Path>,
-    Q: AsRef<Path>,
-{
+pub fn check_reflink_support(
+    from: impl AsRef<Path>,
+    to: impl AsRef<Path>,
+) -> io::Result<ReflinkSupport> {
     let from = get_volume_path(from)?;
     let to = get_volume_path(to)?;
 
@@ -310,7 +309,7 @@ where
         return Ok(ReflinkSupport::NotSupported);
     }
 
-    let volume_flags = get_volume_flags(from)?;
+    let volume_flags = get_volume_flags(&from)?;
     if volume_flags & FILE_SUPPORTS_BLOCK_REFCOUNTING == FILE_SUPPORTS_BLOCK_REFCOUNTING {
         Ok(ReflinkSupport::Supported)
     } else {
@@ -321,7 +320,7 @@ where
 /// A wrapper function for
 /// [GetVolumePathNameW](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getvolumepathnamew)
 /// that retrieves the volume mount point where the specified path is mounted.
-fn get_volume_path<P: AsRef<Path>>(path: P) -> io::Result<Vec<u16>> {
+fn get_volume_path(path: impl AsRef<Path>) -> io::Result<Vec<u16>> {
     let path_wide: Vec<u16> = path
         .as_ref()
         .as_os_str()
@@ -337,7 +336,7 @@ fn get_volume_path<P: AsRef<Path>>(path: P) -> io::Result<Vec<u16>> {
 /// A wrapper function for
 /// [GetVolumeInformationW](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getvolumeinformationw)
 /// that returns `FileSystemFlags`.
-fn get_volume_flags(volume_path_w: Vec<u16>) -> io::Result<u32> {
+fn get_volume_flags(volume_path_w: &Vec<u16>) -> io::Result<u32> {
     let mut file_system_flags = 0u32;
 
     unsafe {

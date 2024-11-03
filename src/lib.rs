@@ -166,11 +166,10 @@ pub fn check_reflink_support(
     from: impl AsRef<Path>,
     to: impl AsRef<Path>,
 ) -> io::Result<ReflinkSupport> {
-    if cfg!(target_os = "windows") {
-        sys::check_reflink_support(from, to)
-    } else {
-        Ok(ReflinkSupport::Unknown)
-    }
+    #[cfg(windows)]
+    return sys::check_reflink_support(from, to);
+    #[cfg(not(windows))]
+    Ok(ReflinkSupport::Unknown)
 }
 
 /// Enum indicating the reflink support status.

@@ -149,3 +149,21 @@ pub fn reflink_or_copy(from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Resu
 
     inner(from.as_ref(), to.as_ref())
 }
+
+pub fn check_reflink_support<P, Q>(from: P, to: Q) -> io::Result<ReflinkSupport>
+where
+    P: AsRef<Path>,
+    Q: AsRef<Path>,
+{
+    if cfg!(target_os = "windows") {
+        sys::check_reflink_support(from, to)
+    } else {
+        Ok(ReflinkSupport::Unknown)
+    }
+}
+
+pub enum ReflinkSupport {
+    Supported,
+    NotSupported,
+    Unknown,
+}

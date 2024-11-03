@@ -1,3 +1,6 @@
+use super::utility::AutoRemovedFile;
+use crate::ReflinkSupport;
+use std::os::windows::ffi::OsStrExt;
 use std::{
     convert::TryInto,
     ffi::c_void,
@@ -6,13 +9,14 @@ use std::{
     mem::{self, MaybeUninit},
     os::windows::{fs::MetadataExt, io::AsRawHandle},
     path::Path,
-    ptr,
 };
 
+use windows::core::PCWSTR;
 use windows::Win32::{
-    Foundation::HANDLE,
+    Foundation::{HANDLE, MAX_PATH},
     Storage::FileSystem::{
-        GetVolumeInformationByHandleW, FILE_ATTRIBUTE_SPARSE_FILE, FILE_FLAGS_AND_ATTRIBUTES,
+        GetVolumeInformationByHandleW, GetVolumeInformationW, FILE_ATTRIBUTE_SPARSE_FILE,
+        FILE_FLAGS_AND_ATTRIBUTES,
     },
     System::{
         Ioctl::{
@@ -25,8 +29,6 @@ use windows::Win32::{
         IO::DeviceIoControl,
     },
 };
-
-use super::utility::AutoRemovedFile;
 
 pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
     // Inspired by https://github.com/0xbadfca11/reflink/blob/master/reflink.cpp
@@ -46,7 +48,7 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
     dest.set_sparse()?;
 
     let src_integrity_info = src.get_integrity_information()?;
-    let cluster_size: i64 = src_integrity_info.ClusterSizeInBytes.try_into().unwrap();
+    let cluster_size: i64 = src_integrity_info.ClusterSizeInBytes.into();
     if cluster_size != 0 {
         if cluster_size != 4 * 1024 && cluster_size != 64 * 1024 {
             return Err(io::Error::new(
@@ -290,4 +292,65 @@ fn round_up(num_to_round: i64, multiple: i64) -> i64 {
     debug_assert!(multiple > 0);
     debug_assert_eq!((multiple & (multiple - 1)), 0);
     (num_to_round + multiple - 1) & -multiple
+}
+
+pub fn check_reflink_support<P, Q>(from: P, to: Q) -> io::Result<ReflinkSupport>
+where
+    P: AsRef<Path>,
+    Q: AsRef<Path>,
+{
+    let from_info = get_volume_information(from)?;
+    let to_info = get_volume_information(to)?;
+
+    if from_info.supports_block_refcounting()
+        && to_info.supports_block_refcounting()
+        && from_info.volume_name == to_info.volume_name
+    {
+        Ok(ReflinkSupport::Supported)
+    } else {
+        Ok(ReflinkSupport::NotSupported)
+    }
+}
+
+struct VolumeInformation {
+    volume_name: String,
+    file_system_flags: u32,
+}
+
+impl VolumeInformation {
+    fn supports_block_refcounting(&self) -> bool {
+        self.file_system_flags & FILE_SUPPORTS_BLOCK_REFCOUNTING == FILE_SUPPORTS_BLOCK_REFCOUNTING
+    }
+}
+
+fn get_volume_information<P: AsRef<Path>>(path: P) -> io::Result<VolumeInformation> {
+    // Convert the volume path to a wide string (PCWSTR)
+    let volume_path_w: Vec<u16> = path
+        .as_ref()
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0)) // Null terminator
+        .collect();
+
+    // Prepare buffers and variables for results
+    let mut volume_name_buffer = vec![0u16; MAX_PATH as usize];
+    let mut volume_name_len = MAX_PATH;
+    let mut file_system_flags = 0u32;
+
+    unsafe {
+        GetVolumeInformationW(
+            PCWSTR(volume_path_w.as_ptr()),
+            Some(volume_name_buffer.as_mut()),
+            Some(&mut volume_name_len),
+            None,
+            Some(&mut file_system_flags as *mut _),
+            None,
+        )
+    }?;
+
+    volume_name_buffer.resize(volume_name_len as usize, 0);
+    Ok(VolumeInformation {
+        volume_name: String::from_utf16_lossy(&volume_name_buffer),
+        file_system_flags,
+    })
 }

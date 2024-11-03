@@ -15,8 +15,8 @@ use windows::core::PCWSTR;
 use windows::Win32::{
     Foundation::{HANDLE, MAX_PATH},
     Storage::FileSystem::{
-        GetVolumeInformationByHandleW, GetVolumeInformationW, FILE_ATTRIBUTE_SPARSE_FILE,
-        FILE_FLAGS_AND_ATTRIBUTES,
+        GetVolumeInformationByHandleW, GetVolumeInformationW, GetVolumePathNameW,
+        FILE_ATTRIBUTE_SPARSE_FILE, FILE_FLAGS_AND_ATTRIBUTES,
     },
     System::{
         Ioctl::{
@@ -294,63 +294,62 @@ fn round_up(num_to_round: i64, multiple: i64) -> i64 {
     (num_to_round + multiple - 1) & -multiple
 }
 
+/// Checks whether reflink is supported on the filesystem for the specified source and target paths.
+///
+/// This function verifies that both paths are on the same volume and that the filesystem supports
+/// reflink.
 pub fn check_reflink_support<P, Q>(from: P, to: Q) -> io::Result<ReflinkSupport>
 where
     P: AsRef<Path>,
     Q: AsRef<Path>,
 {
-    let from_info = get_volume_information(from)?;
-    let to_info = get_volume_information(to)?;
+    let from = get_volume_path(from)?;
+    let to = get_volume_path(to)?;
 
-    if from_info.supports_block_refcounting()
-        && to_info.supports_block_refcounting()
-        && from_info.volume_name == to_info.volume_name
-    {
+    if from != to {
+        return Ok(ReflinkSupport::NotSupported);
+    }
+
+    let volume_flags = get_volume_flags(from)?;
+    if volume_flags & FILE_SUPPORTS_BLOCK_REFCOUNTING == FILE_SUPPORTS_BLOCK_REFCOUNTING {
         Ok(ReflinkSupport::Supported)
     } else {
         Ok(ReflinkSupport::NotSupported)
     }
 }
 
-struct VolumeInformation {
-    volume_name: String,
-    file_system_flags: u32,
-}
-
-impl VolumeInformation {
-    fn supports_block_refcounting(&self) -> bool {
-        self.file_system_flags & FILE_SUPPORTS_BLOCK_REFCOUNTING == FILE_SUPPORTS_BLOCK_REFCOUNTING
-    }
-}
-
-fn get_volume_information<P: AsRef<Path>>(path: P) -> io::Result<VolumeInformation> {
-    // Convert the volume path to a wide string (PCWSTR)
-    let volume_path_w: Vec<u16> = path
+/// A wrapper function for
+/// [GetVolumePathNameW](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getvolumepathnamew)
+/// that retrieves the volume mount point where the specified path is mounted.
+fn get_volume_path<P: AsRef<Path>>(path: P) -> io::Result<Vec<u16>> {
+    let path_wide: Vec<u16> = path
         .as_ref()
         .as_os_str()
         .encode_wide()
-        .chain(std::iter::once(0)) // Null terminator
+        .chain(Some(0))
         .collect();
-
-    // Prepare buffers and variables for results
     let mut volume_name_buffer = vec![0u16; MAX_PATH as usize];
-    let mut volume_name_len = MAX_PATH;
+
+    unsafe { GetVolumePathNameW(PCWSTR(path_wide.as_ptr()), volume_name_buffer.as_mut()) }?;
+    Ok(volume_name_buffer)
+}
+
+/// A wrapper function for
+/// [GetVolumeInformationW](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getvolumeinformationw)
+/// that returns `FileSystemFlags`.
+fn get_volume_flags(volume_path_w: Vec<u16>) -> io::Result<u32> {
     let mut file_system_flags = 0u32;
 
     unsafe {
         GetVolumeInformationW(
             PCWSTR(volume_path_w.as_ptr()),
-            Some(volume_name_buffer.as_mut()),
-            Some(&mut volume_name_len),
+            None,
+            None,
             None,
             Some(&mut file_system_flags as *mut _),
             None,
         )
     }?;
 
-    volume_name_buffer.resize(volume_name_len as usize, 0);
-    Ok(VolumeInformation {
-        volume_name: String::from_utf16_lossy(&volume_name_buffer),
-        file_system_flags,
-    })
+    Ok(file_system_flags)
 }

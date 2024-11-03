@@ -15,8 +15,8 @@ use windows::core::PCWSTR;
 use windows::Win32::{
     Foundation::{HANDLE, MAX_PATH},
     Storage::FileSystem::{
-        GetVolumeInformationByHandleW, GetVolumeInformationW, GetVolumePathNameW,
-        FILE_ATTRIBUTE_SPARSE_FILE, FILE_FLAGS_AND_ATTRIBUTES,
+        GetVolumeInformationByHandleW, GetVolumeInformationW, GetVolumeNameForVolumeMountPointW,
+        GetVolumePathNameW, FILE_ATTRIBUTE_SPARSE_FILE, FILE_FLAGS_AND_ATTRIBUTES,
     },
     System::{
         Ioctl::{
@@ -305,10 +305,9 @@ pub fn check_reflink_support(
     let from_volume = get_volume_path(from)?;
     let to_volume = get_volume_path(to)?;
 
-    let from = String::from_utf16(&from_volume).map_err(io::Error::other)?;
-    let to = String::from_utf16(&to_volume).map_err(io::Error::other)?;
-
-    if from.to_uppercase() != to.to_uppercase() {
+    let from_guid = get_volume_guid_path(&from_volume)?;
+    let to_guid = get_volume_guid_path(&to_volume)?;
+    if from_guid != to_guid {
         return Ok(ReflinkSupport::NotSupported);
     }
 
@@ -334,6 +333,18 @@ fn get_volume_path(path: impl AsRef<Path>) -> io::Result<Vec<u16>> {
 
     unsafe { GetVolumePathNameW(PCWSTR(path_wide.as_ptr()), volume_name_buffer.as_mut()) }?;
     Ok(volume_name_buffer)
+}
+
+/// A wrapper function for
+/// [GetVolumeNameForVolumeMountPointW](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getvolumenameforvolumemountpointw)
+/// that retrieves  a volume GUID path for the volume that is associated with the specified volume
+/// mount point (drive letter, volume GUID path, or mounted folder).
+fn get_volume_guid_path(volume_path_w: &Vec<u16>) -> io::Result<Vec<u16>> {
+    let mut volume_guid_path = vec![0u16; 50usize];
+    unsafe {
+        GetVolumeNameForVolumeMountPointW(PCWSTR(volume_path_w.as_ptr()), volume_guid_path.as_mut())
+    }?;
+    Ok(volume_guid_path)
 }
 
 /// A wrapper function for

@@ -308,6 +308,7 @@ pub fn check_reflink_support(
     let from_guid = get_volume_guid_path(&from_volume)?;
     let to_guid = get_volume_guid_path(&to_volume)?;
     if from_guid != to_guid {
+        // The source and destination files must be on the same volume
         return Ok(ReflinkSupport::NotSupported);
     }
 

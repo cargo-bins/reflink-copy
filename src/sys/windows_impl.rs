@@ -302,14 +302,17 @@ pub fn check_reflink_support(
     from: impl AsRef<Path>,
     to: impl AsRef<Path>,
 ) -> io::Result<ReflinkSupport> {
-    let from = get_volume_path(from)?;
-    let to = get_volume_path(to)?;
+    let from_volume = get_volume_path(from)?;
+    let to_volume = get_volume_path(to)?;
 
-    if from != to {
+    let from = String::from_utf16(&from_volume).map_err(io::Error::other)?;
+    let to = String::from_utf16(&to_volume).map_err(io::Error::other)?;
+
+    if from.to_uppercase() != to.to_uppercase() {
         return Ok(ReflinkSupport::NotSupported);
     }
 
-    let volume_flags = get_volume_flags(&from)?;
+    let volume_flags = get_volume_flags(&from_volume)?;
     if volume_flags & FILE_SUPPORTS_BLOCK_REFCOUNTING == FILE_SUPPORTS_BLOCK_REFCOUNTING {
         Ok(ReflinkSupport::Supported)
     } else {

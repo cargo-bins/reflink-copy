@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.20](https://github.com/cargo-bins/reflink-copy/compare/v0.1.19...v0.1.20) - 2024-11-03
+
+### Other
+
+- Fail reflink_or_copy if target file already exist ([#81](https://github.com/cargo-bins/reflink-copy/pull/81))
+- Bump tempfile from 3.8.0 to 3.12.0 ([#77](https://github.com/cargo-bins/reflink-copy/pull/77))
+
 ## [0.1.19](https://github.com/cargo-bins/reflink-copy/compare/v0.1.18...v0.1.19) - 2024-07-04
 
 ### Other

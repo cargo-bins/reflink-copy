@@ -159,8 +159,13 @@ pub fn reflink_or_copy(from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Resu
 ///
 /// # Example
 /// ```
-/// let support = reflink_copy::check_reflink_support("C:\\path\\to\\file", "C:\\path\\to\\another_file")?;
-/// let support = reflink_copy::check_reflink_support("path\\to\\folder", "path\\to\\another_folder")?;
+/// fn main() -> std::io::Result<()> {
+///     let support = reflink_copy::check_reflink_support("C:\\path\\to\\file", "C:\\path\\to\\another_file")?;
+///     println!("{support:?}");
+///     let support = reflink_copy::check_reflink_support("path\\to\\folder", "path\\to\\another_folder")?;
+///     println!("{support:?}");
+///     Ok(())
+/// }
 /// ```
 pub fn check_reflink_support(
     from: impl AsRef<Path>,

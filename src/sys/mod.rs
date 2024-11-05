@@ -11,6 +11,7 @@ cfg_if! {
     } else if #[cfg(windows)] {
         mod windows_impl;
         pub use self::windows_impl::reflink;
+        pub use self::windows_impl::check_reflink_support;
     } else {
         pub use self::reflink_not_supported as reflink;
     }

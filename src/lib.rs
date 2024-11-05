@@ -149,3 +149,41 @@ pub fn reflink_or_copy(from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Resu
 
     inner(from.as_ref(), to.as_ref())
 }
+/// Checks whether reflink is supported on the filesystem for the specified source and target paths.
+///
+/// This function verifies that both paths are on the same volume and that the filesystem supports
+/// reflink.
+///
+/// > Note: Currently the function works only for windows. It returns `Ok(ReflinkSupport::Unknown)`
+/// > for any other platform.
+///
+/// # Example
+/// ```
+/// fn main() -> std::io::Result<()> {
+///     let support = reflink_copy::check_reflink_support("C:\\path\\to\\file", "C:\\path\\to\\another_file")?;
+///     println!("{support:?}");
+///     let support = reflink_copy::check_reflink_support("path\\to\\folder", "path\\to\\another_folder")?;
+///     println!("{support:?}");
+///     Ok(())
+/// }
+/// ```
+pub fn check_reflink_support(
+    from: impl AsRef<Path>,
+    to: impl AsRef<Path>,
+) -> io::Result<ReflinkSupport> {
+    #[cfg(windows)]
+    return sys::check_reflink_support(from, to);
+    #[cfg(not(windows))]
+    Ok(ReflinkSupport::Unknown)
+}
+
+/// Enum indicating the reflink support status.
+#[derive(Debug, PartialEq, Eq)]
+pub enum ReflinkSupport {
+    /// Reflink is supported.
+    Supported,
+    /// Reflink is not supported.
+    NotSupported,
+    /// Reflink support is unconfirmed.
+    Unknown,
+}

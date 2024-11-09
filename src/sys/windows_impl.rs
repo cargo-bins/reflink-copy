@@ -333,6 +333,11 @@ fn get_volume_path(path: impl AsRef<Path>) -> io::Result<Vec<u16>> {
     let mut volume_name_buffer = vec![0u16; MAX_PATH as usize];
 
     unsafe { GetVolumePathNameW(PCWSTR(path_wide.as_ptr()), volume_name_buffer.as_mut()) }?;
+
+    if let Some(pos) = volume_name_buffer.iter().position(|&c| c == 0) {
+        volume_name_buffer.truncate(pos);
+    }
+
     Ok(volume_name_buffer)
 }
 
@@ -345,6 +350,11 @@ fn get_volume_guid_path(volume_path_w: &Vec<u16>) -> io::Result<Vec<u16>> {
     unsafe {
         GetVolumeNameForVolumeMountPointW(PCWSTR(volume_path_w.as_ptr()), volume_guid_path.as_mut())
     }?;
+
+    if let Some(pos) = volume_guid_path.iter().position(|&c| c == 0) {
+        volume_guid_path.truncate(pos);
+    }
+
     Ok(volume_guid_path)
 }
 
@@ -366,4 +376,30 @@ fn get_volume_flags(volume_path_w: &Vec<u16>) -> io::Result<u32> {
     }?;
 
     Ok(file_system_flags)
+}
+
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_get_volume_guid() -> io::Result<()> {
+        let volume_path = get_volume_path(".")?;
+
+        let re = regex::Regex::new(r"\\\\\?\\Volume\{.{8}-.{4}-.{4}-.{4}-.{12}\}\\").unwrap();
+        let volume_guid = get_volume_guid_path(&volume_path)?;
+        let volume_guid = String::from_utf16(&volume_guid).unwrap();
+        assert!(re.is_match(&volume_guid));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_get_volume_flags() -> io::Result<()> {
+        let volume_path = get_volume_path(".")?;
+        let volume_flags = get_volume_flags(&volume_path)?;
+        assert!(volume_flags > 0);
+        Ok(())
+    }
 }

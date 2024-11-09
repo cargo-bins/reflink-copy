@@ -378,7 +378,6 @@ fn get_volume_flags(volume_path_w: &Vec<u16>) -> io::Result<u32> {
     Ok(file_system_flags)
 }
 
-
 #[cfg(test)]
 mod test {
     use super::*;

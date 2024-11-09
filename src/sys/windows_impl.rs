@@ -343,7 +343,7 @@ fn get_volume_path(path: impl AsRef<Path>) -> io::Result<Vec<u16>> {
 
 /// A wrapper function for
 /// [GetVolumeNameForVolumeMountPointW](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getvolumenameforvolumemountpointw)
-/// that retrieves  a volume GUID path for the volume that is associated with the specified volume
+/// that retrieves a volume GUID path for the volume that is associated with the specified volume
 /// mount point (drive letter, volume GUID path, or mounted folder).
 fn get_volume_guid_path(volume_path_w: &Vec<u16>) -> io::Result<Vec<u16>> {
     let mut volume_guid_path = vec![0u16; 50usize];

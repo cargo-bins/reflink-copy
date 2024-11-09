@@ -62,13 +62,43 @@ jobs:
 
     - uses: Swatinem/rust-cache@v2
 
+    - name: Setup Dev-Drive ReFS1
+      if: ${{ matrix.os == 'windows-latest' }}
+      uses: samypr100/setup-dev-drive@v3
+      with:
+        drive-size: 1GB
+        drive-format: ReFS
+        drive-type: Dynamic
+        drive-path: "${{ runner.temp }}/dev-drives/refs1.vhdx"
+        mount-path: "${{ runner.temp }}/dev-drives/refs1"
+
+    - name: Setup Dev-Drive ReFS2
+      if: ${{ matrix.os == 'windows-latest' }}
+      uses: samypr100/setup-dev-drive@v3
+      with:
+        drive-size: 1GB
+        drive-format: ReFS
+        drive-type: Dynamic
+        drive-path: "${{ runner.temp }}/dev-drives/refs2.vhdx"
+        mount-path: "${{ runner.temp }}/dev-drives/refs2"
+
+    - name: Setup Dev-Drive NTFS
+      if: ${{ matrix.os == 'windows-latest' }}
+      uses: samypr100/setup-dev-drive@v3
+      with:
+        drive-size: 1GB
+        drive-format: NTFS
+        drive-type: Dynamic
+        drive-path: "${{ runner.temp }}/dev-drives/ntfs.vhdx"
+        mount-path: "${{ runner.temp }}/dev-drives/ntfs"
+
     - name: Test
       if: "! matrix.use-cross"
-      run: cargo test --target ${{ matrix.target }}
+      run: cargo test --target ${{ matrix.target }} -- --ignored
 
     - name: Test using cross
       if: "matrix.use-cross"
-      run: cross test --target ${{ matrix.target }}
+      run: cross test --target ${{ matrix.target }} -- --ignored
 
   cross-check:
     strategy:

@@ -383,6 +383,15 @@ mod test {
     use super::*;
 
     #[test]
+    fn test_get_volume_path_is_same() -> io::Result<()> {
+        let src_volume_path = get_volume_path("./src")?;
+        let tests_volume_path = get_volume_path("./tests")?;
+        assert_eq!(src_volume_path, tests_volume_path);
+
+        Ok(())
+    }
+
+    #[test]
     fn test_get_volume_guid() -> io::Result<()> {
         let volume_path = get_volume_path(".")?;
 

@@ -313,7 +313,7 @@ pub fn check_reflink_support(
     }
 
     let volume_flags = get_volume_flags(&from_volume)?;
-    if volume_flags & FILE_SUPPORTS_BLOCK_REFCOUNTING == FILE_SUPPORTS_BLOCK_REFCOUNTING {
+    if volume_flags & FILE_SUPPORTS_BLOCK_REFCOUNTING != 0 {
         Ok(ReflinkSupport::Supported)
     } else {
         Ok(ReflinkSupport::NotSupported)

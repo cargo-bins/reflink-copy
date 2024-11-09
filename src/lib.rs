@@ -178,7 +178,7 @@ pub fn check_reflink_support(
 }
 
 /// Enum indicating the reflink support status.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ReflinkSupport {
     /// Reflink is supported.
     Supported,

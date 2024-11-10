@@ -30,3 +30,5 @@ tracing = ["dep:tracing", "dep:tracing-attributes"]
 
 [dev-dependencies]
 tempfile = "3.12.0"
+regex = "1.11.1"
+walkdir = "2.5.0"

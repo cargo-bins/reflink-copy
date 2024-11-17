@@ -40,7 +40,7 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
         (FILE_FLAGS_AND_ATTRIBUTES(src_metadata.file_attributes()) & FILE_ATTRIBUTE_SPARSE_FILE).0
             != 0;
 
-    let dest = AutoRemovedFile::create_new(to)?;
+    let mut dest = AutoRemovedFile::create_new(to)?;
 
     // Set the destination to be sparse while we clone.
     // Important to avoid allocating zero-backed real storage when cloning
@@ -104,27 +104,13 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
             debug_assert_eq!(bytes_copied % cluster_size, 0);
         }
 
-        let mut dup_extent = DUPLICATE_EXTENTS_DATA {
-            FileHandle: src.as_handle(),
-
-            SourceFileOffset: bytes_copied,
-            TargetFileOffset: bytes_copied,
-            ByteCount: bytes_to_copy,
-        };
-
-        let mut bytes_returned = 0u32;
-        unsafe {
-            DeviceIoControl(
-                dest.as_handle(),
-                FSCTL_DUPLICATE_EXTENTS_TO_FILE,
-                Some(&mut dup_extent as *mut _ as *mut c_void),
-                mem::size_of::<DUPLICATE_EXTENTS_DATA>().try_into().unwrap(),
-                None,
-                0,
-                Some(&mut bytes_returned as *mut _),
-                None,
-            )
-        }?;
+        reflink_block(
+            &src,
+            bytes_copied as u64,
+            dest.as_inner_file_mut(),
+            bytes_copied as u64,
+            bytes_to_copy as u64,
+        )?;
         bytes_copied += bytes_to_copy;
     }
 
@@ -376,6 +362,36 @@ fn get_volume_flags(volume_path_w: &[u16]) -> io::Result<u32> {
     }?;
 
     Ok(file_system_flags)
+}
+
+pub fn reflink_block(
+    from: &File,
+    from_offset: u64,
+    to: &mut File,
+    to_offset: u64,
+    block_size: u64,
+) -> io::Result<()> {
+    let mut dup_extent = DUPLICATE_EXTENTS_DATA {
+        FileHandle: from.as_handle(),
+        SourceFileOffset: from_offset as i64,
+        TargetFileOffset: to_offset as i64,
+        ByteCount: block_size as i64,
+    };
+
+    let mut bytes_returned = 0u32;
+    unsafe {
+        DeviceIoControl(
+            to.as_handle(),
+            FSCTL_DUPLICATE_EXTENTS_TO_FILE,
+            Some(&mut dup_extent as *mut _ as *mut c_void),
+            size_of::<DUPLICATE_EXTENTS_DATA>().try_into().unwrap(),
+            None,
+            0,
+            Some(&mut bytes_returned as *mut _),
+            None,
+        )
+    }?;
+    Ok(())
 }
 
 #[cfg(test)]

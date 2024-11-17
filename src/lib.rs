@@ -187,3 +187,17 @@ pub enum ReflinkSupport {
     /// Reflink support is unconfirmed.
     Unknown,
 }
+
+#[cfg_attr(not(windows), allow(unused_variables))]
+pub fn reflink_block(
+    from: &fs::File,
+    from_offset: u64,
+    to: &mut fs::File,
+    to_offset: u64,
+    block_size: u64,
+) -> io::Result<()> {
+    #[cfg(windows)]
+    return sys::reflink_block(from, from_offset, to, to_offset, block_size);
+    #[cfg(not(windows))]
+    Err(io::Error::other("Not implemented"))
+}

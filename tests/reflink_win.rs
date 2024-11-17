@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 
 const FILE_SIZE: usize = 256 * 1024;
 const FILENAME: &str = "test_file.dat";
+const CLUSTER_SIZE: usize = 64 * 1024;
 
 // paths are defined in build.yml
 
@@ -155,9 +156,8 @@ fn compare_files_eq(file1: &Path, file2: &Path) -> std::io::Result<()> {
 #[test]
 #[ignore]
 fn test_reflink_block_whole_file() -> std::io::Result<()> {
-    let cluster_size = 4096u64;
     let num_clusters = 3;
-    let data_size = cluster_size * num_clusters;
+    let data_size = CLUSTER_SIZE * num_clusters;
 
     let from = make_subfolder(&refs2_dir(), line!())?.join(FILENAME);
     let to = make_subfolder(&refs2_dir(), line!())?.join(FILENAME);
@@ -168,7 +168,7 @@ fn test_reflink_block_whole_file() -> std::io::Result<()> {
         .open(&from)?;
 
     let data: Vec<u8> = (1..=num_clusters)
-        .flat_map(|i| vec![i as u8; cluster_size as usize])
+        .flat_map(|i| vec![i as u8; CLUSTER_SIZE])
         .collect();
     source_file.write_all(&data)?;
     source_file.flush()?;
@@ -179,7 +179,7 @@ fn test_reflink_block_whole_file() -> std::io::Result<()> {
         .open(&to)?;
 
     dest_file.set_len(data_size as u64)?;
-    reflink_block(&source_file, 0, &dest_file, 0, data_size)?;
+    reflink_block(&source_file, 0, &dest_file, 0, data_size as u64)?;
 
     dest_file.flush()?;
     drop(source_file);
@@ -192,9 +192,8 @@ fn test_reflink_block_whole_file() -> std::io::Result<()> {
 #[test]
 #[ignore]
 fn test_reflink_block_reverse() -> std::io::Result<()> {
-    let cluster_size = 4096u64;
     let num_clusters = 3;
-    let data_size = cluster_size * num_clusters;
+    let data_size = CLUSTER_SIZE * num_clusters;
 
     let from = make_subfolder(&refs2_dir(), line!())?.join(FILENAME);
     let to = make_subfolder(&refs2_dir(), line!())?.join(FILENAME);
@@ -205,7 +204,7 @@ fn test_reflink_block_reverse() -> std::io::Result<()> {
         .open(&from)?;
 
     let data: Vec<Vec<u8>> = (1..=num_clusters)
-        .map(|i| vec![i as u8; cluster_size as usize])
+        .map(|i| vec![i as u8; CLUSTER_SIZE])
         .collect();
     for cluster in &data {
         source_file.write_all(&cluster)?;
@@ -223,10 +222,10 @@ fn test_reflink_block_reverse() -> std::io::Result<()> {
         let r = num_clusters - 1 - i;
         reflink_block(
             &source_file,
-            i * cluster_size,
+            (i * CLUSTER_SIZE) as u64,
             &dest_file,
-            r * cluster_size,
-            cluster_size,
+            (r * CLUSTER_SIZE) as u64,
+            CLUSTER_SIZE as u64,
         )?;
     }
     dest_file.flush()?;
@@ -235,7 +234,7 @@ fn test_reflink_block_reverse() -> std::io::Result<()> {
 
     let mut dest_file = std::fs::OpenOptions::new().read(true).open(&to)?;
 
-    let mut buf = vec![0; cluster_size as usize];
+    let mut buf = vec![0; CLUSTER_SIZE];
     for i in num_clusters - 1..=0 {
         dest_file.read(buf.as_mut_slice())?;
         assert_eq!(buf, data[i as usize]);

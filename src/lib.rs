@@ -202,7 +202,8 @@ pub enum ReflinkSupport {
 /// - The source and destination regions must begin and end at a cluster boundary.
 /// - The cloned region must be less than 4GB in length.
 /// - The destination region must not extend past the end of file. If the application wishes to
-///   extend the destination with cloned data, it must first call SetEndOfFile.
+///   extend the destination with cloned data, it must first call
+///   [`File::set_len`](fn@std::fs::File::set_len).
 /// - If the source and destination regions are in the same file, they must not overlap. (The
 ///   application may able to proceed by splitting up the block clone operation into multiple block
 ///   clones that no longer overlap.)

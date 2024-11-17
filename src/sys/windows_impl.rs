@@ -40,7 +40,7 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
         (FILE_FLAGS_AND_ATTRIBUTES(src_metadata.file_attributes()) & FILE_ATTRIBUTE_SPARSE_FILE).0
             != 0;
 
-    let mut dest = AutoRemovedFile::create_new(to)?;
+    let dest = AutoRemovedFile::create_new(to)?;
 
     // Set the destination to be sparse while we clone.
     // Important to avoid allocating zero-backed real storage when cloning
@@ -107,7 +107,7 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
         reflink_block(
             &src,
             bytes_copied as u64,
-            dest.as_inner_file_mut(),
+            dest.as_inner_file(),
             bytes_copied as u64,
             bytes_to_copy as u64,
         )?;
@@ -367,7 +367,7 @@ fn get_volume_flags(volume_path_w: &[u16]) -> io::Result<u32> {
 pub fn reflink_block(
     from: &File,
     from_offset: u64,
-    to: &mut File,
+    to: &File,
     to_offset: u64,
     block_size: u64,
 ) -> io::Result<()> {

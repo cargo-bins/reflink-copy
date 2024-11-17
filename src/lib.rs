@@ -192,7 +192,7 @@ pub enum ReflinkSupport {
 pub fn reflink_block(
     from: &fs::File,
     from_offset: u64,
-    to: &mut fs::File,
+    to: &fs::File,
     to_offset: u64,
     block_size: u64,
 ) -> io::Result<()> {

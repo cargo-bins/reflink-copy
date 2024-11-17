@@ -39,10 +39,6 @@ impl AutoRemovedFile {
     pub fn as_inner_file(&self) -> &File {
         self.inner.as_ref().unwrap()
     }
-
-    pub fn as_inner_file_mut(&mut self) -> &mut File {
-        self.inner.as_mut().unwrap()
-    }
 }
 
 #[cfg(unix)]

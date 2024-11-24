@@ -399,6 +399,30 @@ mod test {
     use super::*;
 
     #[test]
+    fn test_round_up() {
+        assert_eq!(round_up(0, 2), 0);
+        assert_eq!(round_up(1, 2), 2);
+        assert_eq!(round_up(2, 2), 2);
+
+        assert_eq!(round_up(15, 8), 16);
+        assert_eq!(round_up(17, 8), 24);
+
+        assert_eq!(round_up(100000, 4096), 102400);
+        assert_eq!(round_up(100000, 65536), 131072);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_invalid_multiple_zero() {
+        round_up(10, 0);
+    }
+    #[test]
+    #[should_panic]
+    fn test_invalid_multiple_non_power_of_two() {
+        round_up(10, 3);
+    }
+
+    #[test]
     fn test_get_volume_path_is_same() -> io::Result<()> {
         let src_volume_path = get_volume_path("./src")?;
         let tests_volume_path = get_volume_path("./tests")?;

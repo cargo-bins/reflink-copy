@@ -213,7 +213,7 @@ fn test_reflink_block_reverse() -> std::io::Result<()> {
         let from_offset = i * CLUSTER_SIZE;
         let to_offset = r * CLUSTER_SIZE;
         println!(
-            "reflink {}{from_offset} -> {}{to_offset}, block {CLUSTER_SIZE}",
+            "reflink {}:{from_offset} -> {}:{to_offset}, block {CLUSTER_SIZE}",
             from.display(),
             to.display()
         );

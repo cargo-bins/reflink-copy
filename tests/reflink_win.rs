@@ -222,6 +222,42 @@ fn test_reflink_unaligned_file() -> std::io::Result<()> {
 
 #[test]
 #[ignore]
+fn test_reflink_source_file() -> std::io::Result<()> {
+    let num_clusters = 3;
+    let data_size = (CLUSTER_SIZE * num_clusters) as u64;
+
+    let from = make_subfolder(&refs2_dir(), line!())?.join(FILENAME);
+    let mut source_file = std::fs::File::create_new(&from)?;
+
+    let data: Vec<u8> = (1..=num_clusters)
+        .flat_map(|i| vec![i as u8; CLUSTER_SIZE])
+        .collect();
+    source_file.write_all(&data)?;
+    source_file.flush()?;
+    assert_eq!(source_file.metadata()?.len(), data_size);
+
+    source_file.set_len(data_size*2)?;
+    println!(
+        "reflink {}:0 -> {}:{data_size}, block {data_size}",
+        from.display(),
+        from.display()
+    );
+    reflink_block(&source_file, 0, &source_file, data_size, data_size)?;
+    source_file.flush()?;
+    assert_eq!(source_file.metadata()?.len(), data_size*2);
+    drop(source_file);
+
+    let mut file = std::fs::File::open(from)?;
+    let mut buffer1 = vec![0u8; data_size as usize];
+    let mut buffer2 = vec![0u8; data_size as usize];;
+    file.read_exact(buffer1.as_mut_slice())?;
+    file.read_exact(buffer2.as_mut_slice())?;
+    assert_eq!(buffer1, buffer2);
+    Ok(())
+}
+
+#[test]
+#[ignore]
 fn test_reflink_block_reverse() -> std::io::Result<()> {
     let num_clusters = 3;
     let data_size = CLUSTER_SIZE * num_clusters;

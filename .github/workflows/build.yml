@@ -94,13 +94,13 @@ jobs:
 
     - name: Test
       if: "! matrix.use-cross"
-      run: cargo test --target ${{ matrix.target }} -- --ignored
+      run: cargo test --target ${{ matrix.target }} -- --ignored --show-output
       env:
         RUST_BACKTRACE: 1
 
     - name: Test using cross
       if: "matrix.use-cross"
-      run: cross test --target ${{ matrix.target }} -- --ignored
+      run: cross test --target ${{ matrix.target }} -- --ignored --show-output
       env:
         RUST_BACKTRACE: 1
 

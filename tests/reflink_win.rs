@@ -212,7 +212,11 @@ fn test_reflink_block_reverse() -> std::io::Result<()> {
         let r = num_clusters - 1 - i;
         let from_offset = i * CLUSTER_SIZE;
         let to_offset = r * CLUSTER_SIZE;
-        println!("reflink {}{from_offset} -> {}{to_offset}, block {CLUSTER_SIZE}", from.display(), to.display());
+        println!(
+            "reflink {}{from_offset} -> {}{to_offset}, block {CLUSTER_SIZE}",
+            from.display(),
+            to.display()
+        );
         reflink_block(
             &source_file,
             from_offset as u64,

@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 const FILE_SIZE: usize = 256 * 1024;
 const FILENAME: &str = "test_file.dat";
-const CLUSTER_SIZE: usize = 64 * 1024;
+const CLUSTER_SIZE: usize = 4 * 1024;
 
 // paths are defined in build.yml
 
@@ -168,6 +168,39 @@ fn test_reflink_block_whole_file() -> std::io::Result<()> {
         .flat_map(|i| vec![i as u8; CLUSTER_SIZE])
         .collect();
     source_file.write_all(&data)?;
+    source_file.flush()?;
+    assert_eq!(source_file.metadata()?.len(), data_size as u64);
+
+    let mut dest_file = std::fs::File::create_new(&to)?;
+
+    dest_file.set_len(data_size as u64)?;
+    reflink_block(&source_file, 0, &dest_file, 0, data_size as u64)?;
+
+    dest_file.flush()?;
+    drop(source_file);
+    drop(dest_file);
+
+    compare_files_eq(&from, &to)?;
+    Ok(())
+}
+
+
+#[test]
+#[ignore]
+fn test_reflink_unaligned_file() -> std::io::Result<()> {
+    let num_clusters = 3;
+    let data_size = CLUSTER_SIZE * num_clusters + 1;
+
+    let from = make_subfolder(&refs2_dir(), line!())?.join(FILENAME);
+    let to = make_subfolder(&refs2_dir(), line!())?.join(FILENAME);
+
+    let mut source_file = std::fs::File::create_new(&from)?;
+
+    let data: Vec<u8> = (1..=num_clusters)
+        .flat_map(|i| vec![i as u8; CLUSTER_SIZE])
+        .collect();
+    source_file.write_all(&data)?;
+    source_file.write("+".as_bytes())?;
     source_file.flush()?;
     assert_eq!(source_file.metadata()?.len(), data_size as u64);
 

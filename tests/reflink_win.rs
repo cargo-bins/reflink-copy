@@ -184,12 +184,11 @@ fn test_reflink_block_whole_file() -> std::io::Result<()> {
     Ok(())
 }
 
-
 #[test]
 #[ignore]
 fn test_reflink_unaligned_file() -> std::io::Result<()> {
     let num_clusters = 3;
-    let data_size = CLUSTER_SIZE * num_clusters + 1;
+    let data_size = (CLUSTER_SIZE * num_clusters + 1) as u64;
 
     let from = make_subfolder(&refs2_dir(), line!())?.join(FILENAME);
     let to = make_subfolder(&refs2_dir(), line!())?.join(FILENAME);
@@ -202,13 +201,16 @@ fn test_reflink_unaligned_file() -> std::io::Result<()> {
     source_file.write_all(&data)?;
     source_file.write("+".as_bytes())?;
     source_file.flush()?;
-    assert_eq!(source_file.metadata()?.len(), data_size as u64);
+    assert_eq!(source_file.metadata()?.len(), data_size);
 
     let mut dest_file = std::fs::File::create_new(&to)?;
-
-    dest_file.set_len(data_size as u64)?;
-    reflink_block(&source_file, 0, &dest_file, 0, data_size as u64)?;
-
+    dest_file.set_len(data_size)?;
+    println!(
+        "reflink {}:0 -> {}:0, block {data_size}",
+        from.display(),
+        to.display()
+    );
+    reflink_block(&source_file, 0, &dest_file, 0, data_size)?;
     dest_file.flush()?;
     drop(source_file);
     drop(dest_file);

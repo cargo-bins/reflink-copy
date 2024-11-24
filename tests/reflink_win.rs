@@ -162,21 +162,16 @@ fn test_reflink_block_whole_file() -> std::io::Result<()> {
     let from = make_subfolder(&refs2_dir(), line!())?.join(FILENAME);
     let to = make_subfolder(&refs2_dir(), line!())?.join(FILENAME);
 
-    let mut source_file = std::fs::OpenOptions::new()
-        .create_new(true)
-        .write(true)
-        .open(&from)?;
+    let mut source_file = std::fs::File::create_new(&from)?;
 
     let data: Vec<u8> = (1..=num_clusters)
         .flat_map(|i| vec![i as u8; CLUSTER_SIZE])
         .collect();
     source_file.write_all(&data)?;
     source_file.flush()?;
+    assert_eq!(source_file.metadata()?.len(), data_size as u64);
 
-    let mut dest_file = std::fs::OpenOptions::new()
-        .create_new(true)
-        .write(true)
-        .open(&to)?;
+    let mut dest_file = std::fs::File::create_new(&to)?;
 
     dest_file.set_len(data_size as u64)?;
     reflink_block(&source_file, 0, &dest_file, 0, data_size as u64)?;
@@ -198,10 +193,7 @@ fn test_reflink_block_reverse() -> std::io::Result<()> {
     let from = make_subfolder(&refs2_dir(), line!())?.join(FILENAME);
     let to = make_subfolder(&refs2_dir(), line!())?.join(FILENAME);
 
-    let mut source_file = std::fs::OpenOptions::new()
-        .create_new(true)
-        .write(true)
-        .open(&from)?;
+    let mut source_file = std::fs::File::create_new(&from)?;
 
     let data: Vec<Vec<u8>> = (1..=num_clusters)
         .map(|i| vec![i as u8; CLUSTER_SIZE])
@@ -210,21 +202,22 @@ fn test_reflink_block_reverse() -> std::io::Result<()> {
         source_file.write_all(&cluster)?;
     }
     source_file.flush()?;
+    assert_eq!(source_file.metadata()?.len(), data_size as u64);
 
-    let mut dest_file = std::fs::OpenOptions::new()
-        .create_new(true)
-        .write(true)
-        .open(&to)?;
+    let mut dest_file = std::fs::File::create_new(&to)?;
 
     dest_file.set_len(data_size as u64)?;
 
     for i in 0..num_clusters {
         let r = num_clusters - 1 - i;
+        let from_offset = i * CLUSTER_SIZE;
+        let to_offset = r * CLUSTER_SIZE;
+        println!("reflink {}{from_offset} -> {}{to_offset}, block {CLUSTER_SIZE}", from.display(), to.display());
         reflink_block(
             &source_file,
-            (i * CLUSTER_SIZE) as u64,
+            from_offset as u64,
             &dest_file,
-            (r * CLUSTER_SIZE) as u64,
+            to_offset as u64,
             CLUSTER_SIZE as u64,
         )?;
     }

@@ -236,7 +236,7 @@ fn test_reflink_source_file() -> std::io::Result<()> {
     source_file.flush()?;
     assert_eq!(source_file.metadata()?.len(), data_size);
 
-    source_file.set_len(data_size*2)?;
+    source_file.set_len(data_size * 2)?;
     println!(
         "reflink {}:0 -> {}:{data_size}, block {data_size}",
         from.display(),
@@ -244,12 +244,12 @@ fn test_reflink_source_file() -> std::io::Result<()> {
     );
     reflink_block(&source_file, 0, &source_file, data_size, data_size)?;
     source_file.flush()?;
-    assert_eq!(source_file.metadata()?.len(), data_size*2);
+    assert_eq!(source_file.metadata()?.len(), data_size * 2);
     drop(source_file);
 
     let mut file = std::fs::File::open(from)?;
     let mut buffer1 = vec![0u8; data_size as usize];
-    let mut buffer2 = vec![0u8; data_size as usize];;
+    let mut buffer2 = vec![0u8; data_size as usize];
     file.read_exact(buffer1.as_mut_slice())?;
     file.read_exact(buffer2.as_mut_slice())?;
     assert_eq!(buffer1, buffer2);

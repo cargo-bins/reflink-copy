@@ -104,27 +104,13 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
             debug_assert_eq!(bytes_copied % cluster_size, 0);
         }
 
-        let mut dup_extent = DUPLICATE_EXTENTS_DATA {
-            FileHandle: src.as_handle(),
-
-            SourceFileOffset: bytes_copied,
-            TargetFileOffset: bytes_copied,
-            ByteCount: bytes_to_copy,
-        };
-
-        let mut bytes_returned = 0u32;
-        unsafe {
-            DeviceIoControl(
-                dest.as_handle(),
-                FSCTL_DUPLICATE_EXTENTS_TO_FILE,
-                Some(&mut dup_extent as *mut _ as *mut c_void),
-                mem::size_of::<DUPLICATE_EXTENTS_DATA>().try_into().unwrap(),
-                None,
-                0,
-                Some(&mut bytes_returned as *mut _),
-                None,
-            )
-        }?;
+        reflink_block(
+            &src,
+            bytes_copied as u64,
+            dest.as_inner_file(),
+            bytes_copied as u64,
+            bytes_to_copy as u64,
+        )?;
         bytes_copied += bytes_to_copy;
     }
 
@@ -378,9 +364,63 @@ fn get_volume_flags(volume_path_w: &[u16]) -> io::Result<u32> {
     Ok(file_system_flags)
 }
 
+pub fn reflink_block(
+    from: &File,
+    from_offset: u64,
+    to: &File,
+    to_offset: u64,
+    block_size: u64,
+) -> io::Result<()> {
+    let mut dup_extent = DUPLICATE_EXTENTS_DATA {
+        FileHandle: from.as_handle(),
+        SourceFileOffset: from_offset as i64,
+        TargetFileOffset: to_offset as i64,
+        ByteCount: block_size as i64,
+    };
+
+    let mut bytes_returned = 0u32;
+    unsafe {
+        DeviceIoControl(
+            to.as_handle(),
+            FSCTL_DUPLICATE_EXTENTS_TO_FILE,
+            Some(&mut dup_extent as *mut _ as *mut c_void),
+            size_of::<DUPLICATE_EXTENTS_DATA>().try_into().unwrap(),
+            None,
+            0,
+            Some(&mut bytes_returned as *mut _),
+            None,
+        )
+    }?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn test_round_up() {
+        assert_eq!(round_up(0, 2), 0);
+        assert_eq!(round_up(1, 2), 2);
+        assert_eq!(round_up(2, 2), 2);
+
+        assert_eq!(round_up(15, 8), 16);
+        assert_eq!(round_up(17, 8), 24);
+
+        assert_eq!(round_up(100000, 4096), 102400);
+        assert_eq!(round_up(100000, 65536), 131072);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_invalid_multiple_zero() {
+        round_up(10, 0);
+    }
+    #[test]
+    #[should_panic]
+    fn test_invalid_multiple_non_power_of_two() {
+        round_up(10, 3);
+    }
 
     #[test]
     fn test_get_volume_path_is_same() -> io::Result<()> {

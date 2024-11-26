@@ -190,7 +190,7 @@ pub enum ReflinkSupport {
 
 /// Creates a reflink of a specified block from one file to another.
 ///
-/// This function is designed to be high performant and does not perform any extra API calls.
+/// This function is designed to be highly performant and does not perform any extra API calls.
 /// It is expected that the user takes care of necessary preliminary checks and preparations.
 ///
 /// If you need to clone an entire file, consider using the [`reflink`] or [`reflink_or_copy`]

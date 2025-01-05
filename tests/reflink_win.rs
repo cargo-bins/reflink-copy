@@ -31,12 +31,9 @@ fn reflink_block(
     to_offset: u64,
     src_length: u64,
 ) -> std::io::Result<()> {
-    reflink_copy::ReflinkBlockBuilder::default()
-        .from(from)
+    reflink_copy::ReflinkBlockBuilder::new(from, to, NonZeroU64::new(src_length).unwrap())
         .from_offset(from_offset)
-        .to(to)
         .to_offset(to_offset)
-        .src_length(NonZeroU64::new(src_length).unwrap())
         .reflink_block()
 }
 

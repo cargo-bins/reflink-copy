@@ -38,38 +38,39 @@ use std::num::NonZeroU64;
 ///
 /// # Examples
 ///
+/// The example below demonstrates how to create a new file reusing blocks from another file.
 /// ```no_run
 /// use std::fs::File;
 /// use std::num::NonZeroU64;
 ///
-/// fn main() -> std::io::Result<()> {
-///     const CLUSTER_SIZE: u64 = 4096;
-///     let from_file = File::open("source.txt")?;
-///     let len = from_file.metadata()?.len();
-///     let to_file = File::create("destination.txt")?;
+/// fn shuffle() -> std::io::Result<()> {
+///     let from_file = File::open("source.bin")?;
+///     let to_file = File::create("destination.bin")?;
+///     let cluster_size = NonZeroU64::new(4096).unwrap();
+///     let len = cluster_size.get() * 2;
+///
 ///     to_file.set_len(len)?;
-///     let mut offset = 0u64;
-///     while offset < len {
-///         reflink_copy::ReflinkBlockBuilder::new()
-///             .from(&from_file)
-///             .from_offset(offset)
-///             .to(&to_file)
-///             .to_offset(offset)
-///             .src_length(NonZeroU64::new(CLUSTER_SIZE).unwrap())
-///             .cluster_size(NonZeroU64::new(CLUSTER_SIZE).unwrap())
-///             .reflink_block()?;
-///         offset += CLUSTER_SIZE;
-///     }
+///
+///     reflink_copy::ReflinkBlockBuilder::new(&from_file, &to_file, cluster_size)
+///         .from_offset(0)
+///         .to_offset(cluster_size.get())
+///         .reflink_block()?;
+///
+///     reflink_copy::ReflinkBlockBuilder::new(&from_file, &to_file, cluster_size)
+///         .from_offset(cluster_size.get())
+///         .to_offset(0)
+///         .reflink_block()?;
+///
 ///     Ok(())
 /// }
 /// ```
 /// [`reflink`]: crate::reflink
 /// [`reflink_or_copy`]: crate::reflink_or_copy
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct ReflinkBlockBuilder<'from, 'to> {
-    from: Option<&'from File>,
+    from: &'from File,
     from_offset: u64,
-    to: Option<&'to File>,
+    to: &'to File,
     to_offset: u64,
     src_length: u64,
     cluster_size: Option<NonZeroU64>,
@@ -77,15 +78,15 @@ pub struct ReflinkBlockBuilder<'from, 'to> {
 
 impl<'from, 'to> ReflinkBlockBuilder<'from, 'to> {
     /// Creates a new instance of [`ReflinkBlockBuilder`].
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Sets the source file.
-    #[must_use]
-    pub fn from(mut self, from: &'from File) -> ReflinkBlockBuilder<'from, 'to> {
-        self.from = Some(from);
-        self
+    pub fn new(from: &'from File, to: &'to File, src_length: NonZeroU64) -> Self {
+        Self {
+            from,
+            from_offset: 0,
+            to,
+            to_offset: 0,
+            src_length: src_length.get(),
+            cluster_size: None,
+        }
     }
 
     /// Sets the offset within the source file.
@@ -95,24 +96,10 @@ impl<'from, 'to> ReflinkBlockBuilder<'from, 'to> {
         self
     }
 
-    /// Sets the destination file.
-    #[must_use]
-    pub fn to(mut self, to: &'to File) -> ReflinkBlockBuilder<'from, 'to> {
-        self.to = Some(to);
-        self
-    }
-
     /// Sets the offset within the destination file.
     #[must_use]
     pub fn to_offset(mut self, to_offset: u64) -> Self {
         self.to_offset = to_offset;
-        self
-    }
-
-    /// Sets the length of the source data to be reflinked.
-    #[must_use]
-    pub fn src_length(mut self, src_length: NonZeroU64) -> Self {
-        self.src_length = src_length.get();
         self
     }
 
@@ -127,15 +114,11 @@ impl<'from, 'to> ReflinkBlockBuilder<'from, 'to> {
     /// Performs reflink operation for the specified block of data.
     #[cfg_attr(not(windows), allow(unused_variables))]
     pub fn reflink_block(self) -> io::Result<()> {
-        assert!(self.from.is_some(), "`from` is not set");
-        assert!(self.to.is_some(), "`to` is not set");
-        assert_ne!(self.src_length, 0, "`src_length` is not set");
-
         #[cfg(windows)]
         return sys::reflink_block(
-            self.from.unwrap(),
+            self.from,
             self.from_offset,
-            self.to.unwrap(),
+            self.to,
             self.to_offset,
             self.src_length,
             self.cluster_size,

@@ -12,25 +12,23 @@ fn main() -> std::io::Result<()> {
     }
     let src_file = &args[1];
     let tgt_file = &args[2];
-    let cluster_size: u64 = args[3].parse().expect("cannot parse cluster size");
+    let cluster_size =
+        NonZeroU64::new(args[3].parse().expect("cannot parse cluster size")).unwrap();
     let from_file = File::open(src_file)?;
     let len = from_file.metadata()?.len();
     let to_file = File::create(tgt_file)?;
     to_file.set_len(len)?;
+
     let mut offset = 0u64;
     while offset < len as u64 {
         println!("reflink {offset}, {cluster_size}");
-        reflink_copy::ReflinkBlockBuilder::default()
-            .from(&from_file)
+        reflink_copy::ReflinkBlockBuilder::new(&from_file, &to_file, cluster_size)
             .from_offset(offset)
-            .to(&to_file)
             .to_offset(offset)
-            .src_length(NonZeroU64::new(cluster_size).unwrap())
-            .cluster_size(NonZeroU64::new(cluster_size).unwrap())
+            .cluster_size(cluster_size)
             .reflink_block()?;
 
-        //reflink_block(&from_file, offset, &to_file, offset, cluster_size)?;
-        offset += cluster_size;
+        offset += cluster_size.get();
     }
     Ok(())
 }

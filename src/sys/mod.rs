@@ -12,7 +12,7 @@ cfg_if! {
         mod windows_impl;
         pub use self::windows_impl::reflink;
         pub use self::windows_impl::check_reflink_support;
-        pub use self::windows_impl::reflink_block;
+        pub(crate) use self::windows_impl::reflink_block;
     } else {
         pub use self::reflink_not_supported as reflink;
     }

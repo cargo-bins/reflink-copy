@@ -1,9 +1,8 @@
 #![cfg(windows)]
 
-use reflink_copy::{
-    check_reflink_support, reflink, reflink_block, reflink_or_copy, ReflinkSupport,
-};
+use reflink_copy::{check_reflink_support, reflink, reflink_or_copy, ReflinkSupport};
 use std::io::{Read, Write};
+use std::num::NonZeroU64;
 use std::path::{Path, PathBuf};
 
 const FILE_SIZE: usize = 256 * 1024;
@@ -23,6 +22,22 @@ fn refs2_dir() -> PathBuf {
 }
 fn ntfs_dir() -> PathBuf {
     temp_dir().join("dev-drives").join("ntfs")
+}
+
+fn reflink_block(
+    from: &std::fs::File,
+    from_offset: u64,
+    to: &std::fs::File,
+    to_offset: u64,
+    src_length: u64,
+) -> std::io::Result<()> {
+    reflink_copy::ReflinkBlockBuilder::default()
+        .from(from)
+        .from_offset(from_offset)
+        .to(to)
+        .to_offset(to_offset)
+        .src_length(NonZeroU64::new(src_length).unwrap())
+        .reflink_block()
 }
 
 fn make_subfolder(folder: &Path, line: u32) -> std::io::Result<PathBuf> {

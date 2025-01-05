@@ -1,5 +1,6 @@
 use super::utility::AutoRemovedFile;
 use crate::ReflinkSupport;
+use std::num::NonZeroU64;
 
 use std::{
     convert::TryInto,
@@ -90,30 +91,19 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
         }
     };
 
-    let mut bytes_copied = 0;
-    // Must be smaller than 4GB; This is always a multiple of ClusterSize
-    let max_copy_len: i64 = if cluster_size == 0 {
-        total_copy_len
+    let cluster_size = if cluster_size != 0 {
+        Some(NonZeroU64::new(cluster_size as u64).unwrap())
     } else {
-        (4 * 1024 * 1024 * 1024) - cluster_size
+        None
     };
-    while bytes_copied < total_copy_len {
-        let bytes_to_copy = total_copy_len.min(max_copy_len);
-        if cluster_size != 0 {
-            debug_assert_eq!(bytes_to_copy % cluster_size, 0);
-            debug_assert_eq!(bytes_copied % cluster_size, 0);
-        }
-
-        reflink_block(
-            &src,
-            bytes_copied as u64,
-            dest.as_inner_file(),
-            bytes_copied as u64,
-            bytes_to_copy as u64,
-        )?;
-        bytes_copied += bytes_to_copy;
-    }
-
+    reflink_block(
+        &src,
+        0,
+        dest.as_inner_file(),
+        0,
+        total_copy_len as u64,
+        cluster_size,
+    )?;
     if !src_is_sparse {
         dest.unset_sparse()?;
     }
@@ -364,18 +354,57 @@ fn get_volume_flags(volume_path_w: &[u16]) -> io::Result<u32> {
     Ok(file_system_flags)
 }
 
-pub fn reflink_block(
+pub(crate) fn reflink_block(
     from: &File,
     from_offset: u64,
     to: &File,
     to_offset: u64,
-    block_size: u64,
+    src_length: u64,
+    cluster_size: Option<NonZeroU64>,
+) -> io::Result<()> {
+    const GB: u64 = 1024u64 * 1024 * 1024;
+    const MAX_REFS_CLUSTER_SIZE: u64 = 64 * 1024;
+
+    // Must be smaller than 4GB; This is always a multiple of ClusterSize
+    let max_io_size = 4u64 * GB
+        - cluster_size
+            .map(NonZeroU64::get)
+            .unwrap_or(MAX_REFS_CLUSTER_SIZE);
+
+    let mut bytes_copied = 0;
+    while bytes_copied < src_length {
+        let bytes_to_copy = max_io_size.min(src_length - bytes_copied);
+        if let Some(cluster_size) = cluster_size {
+            debug_assert_eq!(bytes_to_copy % cluster_size, 0);
+            debug_assert_eq!(bytes_copied % cluster_size, 0);
+        }
+
+        duplicate_extent_to_file(
+            from,
+            from_offset + bytes_copied,
+            to,
+            to_offset + bytes_copied,
+            bytes_to_copy,
+        )?;
+
+        bytes_copied += bytes_to_copy;
+    }
+
+    Ok(())
+}
+
+fn duplicate_extent_to_file(
+    from: &File,
+    from_offset: u64,
+    to: &File,
+    to_offset: u64,
+    src_length: u64,
 ) -> io::Result<()> {
     let mut dup_extent = DUPLICATE_EXTENTS_DATA {
         FileHandle: from.as_handle(),
         SourceFileOffset: from_offset as i64,
         TargetFileOffset: to_offset as i64,
-        ByteCount: block_size as i64,
+        ByteCount: src_length as i64,
     };
 
     let mut bytes_returned = 0u32;

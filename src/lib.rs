@@ -14,6 +14,7 @@
 //!
 //! As soon as other OSes support the functionality, support will be added.
 
+mod reflink_block;
 mod sys;
 
 use std::fs;
@@ -188,70 +189,4 @@ pub enum ReflinkSupport {
     Unknown,
 }
 
-/// Creates a reflink of a specified block from one file to another.
-///
-/// This function is designed to be highly performant and does not perform any extra API calls.
-/// It is expected that the user takes care of necessary preliminary checks and preparations.
-///
-/// If you need to clone an entire file, consider using the [`reflink`] or [`reflink_or_copy`]
-/// functions instead.
-///
-/// > Note: Currently the function works only for windows. It returns `Err` for any other platform.
-///
-/// # Windows Restrictions and Remarks
-/// - The source and destination regions must begin and end at a cluster boundary.
-/// - The cloned region must be less than 4GB in length.
-/// - The destination region must not extend past the end of file. If the application wishes to
-///   extend the destination with cloned data, it must first call
-///   [`File::set_len`](fn@std::fs::File::set_len).
-/// - If the source and destination regions are in the same file, they must not overlap. (The
-///   application may able to proceed by splitting up the block clone operation into multiple block
-///   clones that no longer overlap.)
-/// - The source and destination files must be on the same ReFS volume.
-/// - The source and destination files must have the same Integrity Streams setting (that is,
-///   Integrity Streams must be enabled in both files, or disabled in both files).
-/// - If the source file is sparse, the destination file must also be sparse.
-/// - The block clone operation will break Shared Opportunistic Locks (also known as Level 2
-///   Opportunistic Locks).
-/// - The ReFS volume must have been formatted with Windows Server 2016, and if Windows Failover
-///   Clustering is in use, the Clustering Functional Level must have been Windows Server 2016 or
-///   later at format time.
-///
-/// More information can be found by the
-/// [link](https://learn.microsoft.com/en-us/windows/win32/fileio/block-cloning).
-///
-/// # Examples
-///
-/// ```no_run
-/// use std::fs::File;
-///
-/// fn main() -> std::io::Result<()> {
-///     const CLUSTER_SIZE: u64 = 4096;
-///     let from_file = File::open("source.txt")?;
-///     let len = from_file.metadata()?.len();
-///     let to_file = File::create("destination.txt")?;
-///     to_file.set_len(len)?;
-///     let mut offset = 0u64;
-///     while offset < len {
-///         reflink_copy::reflink_block(&from_file, offset, &to_file, offset, CLUSTER_SIZE)?;
-///         offset += CLUSTER_SIZE;
-///     }
-///     if offset > len {
-///         to_file.set_len(len)?;
-///     }
-///     Ok(())
-/// }
-/// ```
-#[cfg_attr(not(windows), allow(unused_variables))]
-pub fn reflink_block(
-    from: &fs::File,
-    from_offset: u64,
-    to: &fs::File,
-    to_offset: u64,
-    block_size: u64,
-) -> io::Result<()> {
-    #[cfg(windows)]
-    return sys::reflink_block(from, from_offset, to, to_offset, block_size);
-    #[cfg(not(windows))]
-    Err(io::Error::other("Not implemented"))
-}
+pub use reflink_block::ReflinkBlockBuilder;

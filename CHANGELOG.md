@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.21](https://github.com/cargo-bins/reflink-copy/compare/v0.1.20...v0.1.21) - 2025-01-08
+
+### Other
+
+- Bump windows from 0.58.0 to 0.59.0 ([#90](https://github.com/cargo-bins/reflink-copy/pull/90))
+
 ## [0.1.20](https://github.com/cargo-bins/reflink-copy/compare/v0.1.19...v0.1.20) - 2024-11-10
 
 ### Other

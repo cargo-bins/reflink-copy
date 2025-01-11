@@ -13,14 +13,16 @@ use std::num::NonZeroU64;
 ///
 /// > Note: Currently the function works only for windows. It returns `Err` for any other platform.
 ///
-/// # Windows Restrictions and Remarks
+/// # General restrictions
 /// - The source and destination regions must begin and end at a cluster boundary.
-/// - The destination region must not extend past the end of file. If the application wishes to
-///   extend the destination with cloned data, it must first call
-///   [`File::set_len`](fn@std::fs::File::set_len).
 /// - If the source and destination regions are in the same file, they must not overlap. (The
 ///   application may able to proceed by splitting up the block clone operation into multiple block
 ///   clones that no longer overlap.)
+///
+/// # Windows specific restrictions and remarks
+/// - The destination region must not extend past the end of file. If the application wishes to
+///   extend the destination with cloned data, it must first call
+///   [`File::set_len`](fn@std::fs::File::set_len).
 /// - The source and destination files must be on the same ReFS volume.
 /// - The source and destination files must have the same Integrity Streams setting (that is,
 ///   Integrity Streams must be enabled in both files, or disabled in both files).
@@ -30,10 +32,13 @@ use std::num::NonZeroU64;
 /// - The ReFS volume must have been formatted with Windows Server 2016, and if Windows Failover
 ///   Clustering is in use, the Clustering Functional Level must have been Windows Server 2016 or
 ///   later at format time.
-/// - Note: If block is 4GB or larger, [`ReflinkBlockBuilder::reflink_block`] splits it to multiple
-///   smaller blocks with the size of 4GB minus cluster size.
 ///
-/// More information can be found by the
+/// > Note: In order to handle blocks larger than 4GB,
+///   [`ReflinkBlockBuilder::reflink_block`] splits these big blocks into smaller ones.
+///   Each smaller block is 4GB minus the cluster size. This means there might be more than one API
+///   call needed for the larger blocks.
+///
+/// More information about block cloning on Windows can be found by the
 /// [link](https://learn.microsoft.com/en-us/windows/win32/fileio/block-cloning).
 ///
 /// # Examples

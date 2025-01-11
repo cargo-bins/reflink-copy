@@ -1,19 +1,20 @@
 use std::fs::File;
 use std::num::NonZeroU64;
 
+// cargo run --example reflink_block V:/file.bin V:/file_cow.bin 4096
+
 fn main() -> std::io::Result<()> {
     let args: Vec<_> = std::env::args().collect();
-    if args.len() < 4 {
+
+    let [_, src_file, tgt_file, cluster_size] = &args[..] else {
         eprintln!(
             "Usage: {} <source_file> <target_file> <cluster_size>",
             args[0]
         );
         return Ok(());
-    }
-    let src_file = &args[1];
-    let tgt_file = &args[2];
-    let cluster_size =
-        NonZeroU64::new(args[3].parse().expect("cannot parse cluster size")).unwrap();
+    };
+    let cluster_size: NonZeroU64 = cluster_size.parse().expect("cannot parse cluster size");
+
     let from_file = File::open(src_file)?;
     let len = from_file.metadata()?.len();
     let to_file = File::create(tgt_file)?;

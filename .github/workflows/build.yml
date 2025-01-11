@@ -76,7 +76,7 @@ jobs:
       if: ${{ matrix.os == 'windows-latest' }}
       uses: samypr100/setup-dev-drive@v3
       with:
-        drive-size: 1GB
+        drive-size: 16GB
         drive-format: ReFS
         drive-type: Dynamic
         drive-path: "${{ runner.temp }}/dev-drives/refs2.vhdx"

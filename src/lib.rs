@@ -14,6 +14,7 @@
 //!
 //! As soon as other OSes support the functionality, support will be added.
 
+mod reflink_block;
 mod sys;
 
 use std::fs;
@@ -187,3 +188,5 @@ pub enum ReflinkSupport {
     /// Reflink support is unconfirmed.
     Unknown,
 }
+
+pub use reflink_block::ReflinkBlockBuilder;

@@ -1,5 +1,6 @@
 use super::utility::AutoRemovedFile;
 use crate::ReflinkSupport;
+use std::num::NonZeroU64;
 
 use std::{
     convert::TryInto,
@@ -90,44 +91,19 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
         }
     };
 
-    let mut bytes_copied = 0;
-    // Must be smaller than 4GB; This is always a multiple of ClusterSize
-    let max_copy_len: i64 = if cluster_size == 0 {
-        total_copy_len
+    let cluster_size = if cluster_size != 0 {
+        Some(NonZeroU64::new(cluster_size as u64).unwrap())
     } else {
-        (4 * 1024 * 1024 * 1024) - cluster_size
+        None
     };
-    while bytes_copied < total_copy_len {
-        let bytes_to_copy = total_copy_len.min(max_copy_len);
-        if cluster_size != 0 {
-            debug_assert_eq!(bytes_to_copy % cluster_size, 0);
-            debug_assert_eq!(bytes_copied % cluster_size, 0);
-        }
-
-        let mut dup_extent = DUPLICATE_EXTENTS_DATA {
-            FileHandle: src.as_handle(),
-
-            SourceFileOffset: bytes_copied,
-            TargetFileOffset: bytes_copied,
-            ByteCount: bytes_to_copy,
-        };
-
-        let mut bytes_returned = 0u32;
-        unsafe {
-            DeviceIoControl(
-                dest.as_handle(),
-                FSCTL_DUPLICATE_EXTENTS_TO_FILE,
-                Some(&mut dup_extent as *mut _ as *mut c_void),
-                mem::size_of::<DUPLICATE_EXTENTS_DATA>().try_into().unwrap(),
-                None,
-                0,
-                Some(&mut bytes_returned as *mut _),
-                None,
-            )
-        }?;
-        bytes_copied += bytes_to_copy;
-    }
-
+    reflink_block(
+        &src,
+        0,
+        dest.as_inner_file(),
+        0,
+        total_copy_len as u64,
+        cluster_size,
+    )?;
     if !src_is_sparse {
         dest.unset_sparse()?;
     }
@@ -378,9 +354,102 @@ fn get_volume_flags(volume_path_w: &[u16]) -> io::Result<u32> {
     Ok(file_system_flags)
 }
 
+pub(crate) fn reflink_block(
+    from: &File,
+    from_offset: u64,
+    to: &File,
+    to_offset: u64,
+    src_length: u64,
+    cluster_size: Option<NonZeroU64>,
+) -> io::Result<()> {
+    const GB: u64 = 1024u64 * 1024 * 1024;
+    const MAX_REFS_CLUSTER_SIZE: u64 = 64 * 1024;
+
+    // Must be smaller than 4GB; This is always a multiple of ClusterSize
+    let max_io_size = 4u64 * GB
+        - cluster_size
+            .map(NonZeroU64::get)
+            .unwrap_or(MAX_REFS_CLUSTER_SIZE);
+
+    let mut bytes_copied = 0;
+    while bytes_copied < src_length {
+        let bytes_to_copy = max_io_size.min(src_length - bytes_copied);
+        if let Some(cluster_size) = cluster_size {
+            debug_assert_eq!(bytes_to_copy % cluster_size, 0);
+            debug_assert_eq!(bytes_copied % cluster_size, 0);
+        }
+
+        duplicate_extent_to_file(
+            from,
+            from_offset + bytes_copied,
+            to,
+            to_offset + bytes_copied,
+            bytes_to_copy,
+        )?;
+
+        bytes_copied += bytes_to_copy;
+    }
+
+    Ok(())
+}
+
+fn duplicate_extent_to_file(
+    from: &File,
+    from_offset: u64,
+    to: &File,
+    to_offset: u64,
+    src_length: u64,
+) -> io::Result<()> {
+    let mut dup_extent = DUPLICATE_EXTENTS_DATA {
+        FileHandle: from.as_handle(),
+        SourceFileOffset: from_offset as i64,
+        TargetFileOffset: to_offset as i64,
+        ByteCount: src_length as i64,
+    };
+
+    let mut bytes_returned = 0u32;
+    unsafe {
+        DeviceIoControl(
+            to.as_handle(),
+            FSCTL_DUPLICATE_EXTENTS_TO_FILE,
+            Some(&mut dup_extent as *mut _ as *mut c_void),
+            size_of::<DUPLICATE_EXTENTS_DATA>().try_into().unwrap(),
+            None,
+            0,
+            Some(&mut bytes_returned as *mut _),
+            None,
+        )
+    }?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn test_round_up() {
+        assert_eq!(round_up(0, 2), 0);
+        assert_eq!(round_up(1, 2), 2);
+        assert_eq!(round_up(2, 2), 2);
+
+        assert_eq!(round_up(15, 8), 16);
+        assert_eq!(round_up(17, 8), 24);
+
+        assert_eq!(round_up(100000, 4096), 102400);
+        assert_eq!(round_up(100000, 65536), 131072);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_invalid_multiple_zero() {
+        round_up(10, 0);
+    }
+    #[test]
+    #[should_panic]
+    fn test_invalid_multiple_non_power_of_two() {
+        round_up(10, 3);
+    }
 
     #[test]
     fn test_get_volume_path_is_same() -> io::Result<()> {

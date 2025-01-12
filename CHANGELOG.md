@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.22](https://github.com/cargo-bins/reflink-copy/compare/v0.1.21...v0.1.22) - 2025-01-11
+
+### Other
+
+- Add reflink_block function ([#85](https://github.com/cargo-bins/reflink-copy/pull/85))
+
 ## [0.1.21](https://github.com/cargo-bins/reflink-copy/compare/v0.1.20...v0.1.21) - 2025-01-08
 
 ### Other

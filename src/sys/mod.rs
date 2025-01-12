@@ -26,6 +26,7 @@ pub fn reflink_not_supported(_from: &Path, _to: &Path) -> std::io::Result<()> {
     Err(std::io::ErrorKind::Unsupported.into())
 }
 
+#[allow(dead_code)]
 pub(crate) fn reflink_block_not_supported(
     _from: &fs::File,
     _from_offset: u64,

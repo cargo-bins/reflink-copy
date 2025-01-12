@@ -9,7 +9,7 @@ cfg_if! {
     if #[cfg(unix)] {
         mod unix;
         pub use self::unix::reflink;
-        pub(crate) use self::reflink_block;
+        pub(crate) use self::unix::reflink_block;
     } else if #[cfg(windows)] {
         mod windows_impl;
         pub use self::windows_impl::reflink;

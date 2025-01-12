@@ -26,8 +26,8 @@ pub(crate) fn reflink_block(
         libc::ioctl(
             to.as_raw_fd(),
             libc::FICLONE,
-            &libc::ficlone_range {
-                src_fd: from.as_raw_fd(),
+            &libc::file_clone_range {
+                src_fd: from.as_raw_fd().into(),
                 src_offset: from_offset,
                 src_length,
                 dest_offset: to_offset,

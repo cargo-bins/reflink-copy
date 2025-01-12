@@ -25,7 +25,7 @@ pub(crate) fn reflink_block(
     let ret = unsafe {
         libc::ioctl(
             to.as_raw_fd(),
-            libc::FICLONE,
+            libc::FICLONERANGE,
             &libc::file_clone_range {
                 src_fd: from.as_raw_fd().into(),
                 src_offset: from_offset,

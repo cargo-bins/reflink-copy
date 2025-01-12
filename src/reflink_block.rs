@@ -117,18 +117,14 @@ impl<'from, 'to> ReflinkBlockBuilder<'from, 'to> {
     }
 
     /// Performs reflink operation for the specified block of data.
-    #[cfg_attr(not(windows), allow(unused_variables))]
     pub fn reflink_block(self) -> io::Result<()> {
-        #[cfg(windows)]
-        return sys::reflink_block(
+        sys::reflink_block(
             self.from,
             self.from_offset,
             self.to,
             self.to_offset,
             self.src_length,
             self.cluster_size,
-        );
-        #[cfg(not(windows))]
-        Err(io::Error::other("Not implemented"))
+        )
     }
 }

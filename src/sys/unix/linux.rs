@@ -1,3 +1,4 @@
+use std::convert::TryInto;
 use std::os::unix::io::AsRawFd;
 use std::{fs, io, path::Path};
 
@@ -14,6 +15,7 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
 pub(crate) fn reflink_block(
     from: &fs::File,
     from_offset: u64,
@@ -25,7 +27,7 @@ pub(crate) fn reflink_block(
     let ret = unsafe {
         libc::ioctl(
             to.as_raw_fd(),
-            libc::FICLONERANGE,
+            libc::FICLONERANGE.try_into().unwrap(),
             &libc::file_clone_range {
                 src_fd: from.as_raw_fd().into(),
                 src_offset: from_offset,
@@ -41,3 +43,6 @@ pub(crate) fn reflink_block(
         Ok(())
     }
 }
+
+#[cfg(target_os = "android")]
+pub(crate) use crate::sys::reflink_block_not_supported as reflink_block;

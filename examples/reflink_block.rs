@@ -21,15 +21,23 @@ fn main() -> std::io::Result<()> {
     to_file.set_len(len)?;
 
     let mut offset = 0u64;
-    while offset < len as u64 {
-        println!("reflink {offset}, {cluster_size}");
-        reflink_copy::ReflinkBlockBuilder::new(&from_file, &to_file, cluster_size)
+    while offset < len {
+        let src_length = if cfg!(windows) {
+            // Windows API clones the entire cluster regardless of the number of bytes actually used
+            // by the file in that cluster.
+            cluster_size
+        } else {
+            cluster_size.min(NonZeroU64::new(len - offset).unwrap())
+        };
+
+        println!("reflink {offset}, {src_length}");
+        reflink_copy::ReflinkBlockBuilder::new(&from_file, &to_file, src_length)
             .from_offset(offset)
             .to_offset(offset)
             .cluster_size(cluster_size)
             .reflink_block()?;
 
-        offset += cluster_size.get();
+        offset += src_length.get();
     }
     Ok(())
 }

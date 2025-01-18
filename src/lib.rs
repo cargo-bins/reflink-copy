@@ -168,6 +168,7 @@ pub fn reflink_or_copy(from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Resu
 ///     Ok(())
 /// }
 /// ```
+#[cfg_attr(not(windows), allow(unused_variables))]
 pub fn check_reflink_support(
     from: impl AsRef<Path>,
     to: impl AsRef<Path>,

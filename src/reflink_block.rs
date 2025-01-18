@@ -11,15 +11,28 @@ use std::num::NonZeroU64;
 /// If you need to clone an entire file, consider using the [`reflink`] or [`reflink_or_copy`]
 /// functions instead.
 ///
-/// > Note: Currently the function works only for windows. It returns `Err` for any other platform.
+/// > Note: Currently the function works only for windows and linux platforms. It returns `Err` for
+///   any other platform.
 ///
 /// # General restrictions
+///
 /// - The source and destination regions must begin and end at a cluster boundary.
 /// - If the source and destination regions are in the same file, they must not overlap. (The
 ///   application may able to proceed by splitting up the block clone operation into multiple block
 ///   clones that no longer overlap.)
+/// - `src_length` equal to 0 is not supported.
+///
+/// # Linux specific restrictions and remarks
+///
+/// - If the file size is not aligned to the cluster size, the reflink operation must not exceed
+///   the file length. For example, to reflink the whole file with size of 7000 bytes, `src_length`
+///   should be 7000 bytes.
+///
+/// More information about block cloning on Linux can be found by the
+/// [link](https://www.man7.org/linux/man-pages/man2/ioctl_ficlonerange.2.html).
 ///
 /// # Windows specific restrictions and remarks
+///
 /// - The destination region must not extend past the end of file. If the application wishes to
 ///   extend the destination with cloned data, it must first call
 ///   [`File::set_len`](fn@std::fs::File::set_len).
@@ -32,6 +45,9 @@ use std::num::NonZeroU64;
 /// - The ReFS volume must have been formatted with Windows Server 2016, and if Windows Failover
 ///   Clustering is in use, the Clustering Functional Level must have been Windows Server 2016 or
 ///   later at format time.
+/// - If the file size is not aligned to the cluster size, the reflink operation should still
+///   be aligned by the cluster size. For example, to reflink the whole file with size of 7000 bytes
+///   and a cluster size of 4096 bytes, `src_length` should be 8192 bytes.
 ///
 /// > Note: In order to handle blocks larger than 4GB,
 ///   [`ReflinkBlockBuilder::reflink_block`] splits these big blocks into smaller ones.
@@ -117,18 +133,14 @@ impl<'from, 'to> ReflinkBlockBuilder<'from, 'to> {
     }
 
     /// Performs reflink operation for the specified block of data.
-    #[cfg_attr(not(windows), allow(unused_variables))]
     pub fn reflink_block(self) -> io::Result<()> {
-        #[cfg(windows)]
-        return sys::reflink_block(
+        sys::reflink_block(
             self.from,
             self.from_offset,
             self.to,
             self.to_offset,
             self.src_length,
             self.cluster_size,
-        );
-        #[cfg(not(windows))]
-        Err(io::Error::other("Not implemented"))
+        )
     }
 }

@@ -22,7 +22,7 @@ version = "0.38.20"
 default-features = false
 features = ["fs", "std"]
 
-[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies.libc]
+[target.'cfg(target_os = "linux")'.dependencies.libc]
 version = "0.2.169"
 
 [target.'cfg(windows)'.dependencies]

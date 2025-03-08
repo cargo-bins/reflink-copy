@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.25](https://github.com/cargo-bins/reflink-copy/compare/v0.1.24...v0.1.25) - 2025-03-08
+
+### Other
+
+- Bump rustix from 0.38.34 to 1.0.1 ([#101](https://github.com/cargo-bins/reflink-copy/pull/101))
+
 ## [0.1.24](https://github.com/cargo-bins/reflink-copy/compare/v0.1.23...v0.1.24) - 2025-02-25
 
 ### Other

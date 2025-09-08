@@ -12,3 +12,5 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
+    # Use a wider range to avoid duplication of the windows crates in downstream crates
+    versioning-strategy: "widen"

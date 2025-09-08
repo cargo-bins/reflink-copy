@@ -26,7 +26,8 @@ features = ["fs", "std"]
 version = "0.2.169"
 
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.62.0", features = ["Win32_Storage_FileSystem", "Win32_Foundation", "Win32_System_Ioctl", "Win32_System_IO", "Win32_System_SystemServices"] }
+# Use a wider range to avoid duplication of the windows crates in downstream crates
+windows = { version = ">=0.61.0,<0.63.0", features = ["Win32_Storage_FileSystem", "Win32_Foundation", "Win32_System_Ioctl", "Win32_System_IO", "Win32_System_SystemServices"] }
 
 [features]
 tracing = ["dep:tracing", "dep:tracing-attributes"]

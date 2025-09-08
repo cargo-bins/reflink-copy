@@ -11,9 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Other
 
-- Fix dependabot.yml
-- Widen range to avoid duplication of windows crates downstream ([#135](https://github.com/cargo-bins/reflink-copy/pull/135))
-- use ubuntu-latest instead of ubuntu-20.04 in build.yml ([#132](https://github.com/cargo-bins/reflink-copy/pull/132))
+- Support windows 0.61.0 as well as 0.62.0 ([#135](https://github.com/cargo-bins/reflink-copy/pull/135))
 
 ## [0.1.27](https://github.com/cargo-bins/reflink-copy/compare/v0.1.26...v0.1.27) - 2025-09-05
 

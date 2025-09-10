@@ -33,6 +33,6 @@ windows = { version = ">=0.61.0,<0.63.0", features = ["Win32_Storage_FileSystem"
 tracing = ["dep:tracing", "dep:tracing-attributes"]
 
 [dev-dependencies]
-tempfile = "3.12.0"
+tempfile = "3.22.0"
 regex = "1.11.1"
 walkdir = "2.5.0"

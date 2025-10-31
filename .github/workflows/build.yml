@@ -64,7 +64,7 @@ jobs:
 
     - name: Setup Dev-Drive ReFS1
       if: ${{ matrix.os == 'windows-latest' }}
-      uses: samypr100/setup-dev-drive@v3
+      uses: samypr100/setup-dev-drive@v4
       with:
         drive-size: 1GB
         drive-format: ReFS
@@ -74,7 +74,7 @@ jobs:
 
     - name: Setup Dev-Drive ReFS2
       if: ${{ matrix.os == 'windows-latest' }}
-      uses: samypr100/setup-dev-drive@v3
+      uses: samypr100/setup-dev-drive@v4
       with:
         drive-size: 16GB
         drive-format: ReFS
@@ -84,7 +84,7 @@ jobs:
 
     - name: Setup Dev-Drive NTFS
       if: ${{ matrix.os == 'windows-latest' }}
-      uses: samypr100/setup-dev-drive@v3
+      uses: samypr100/setup-dev-drive@v4
       with:
         drive-size: 1GB
         drive-format: NTFS

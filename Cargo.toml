@@ -23,7 +23,7 @@ default-features = false
 features = ["fs", "std"]
 
 [target.'cfg(target_os = "linux")'.dependencies.libc]
-version = "0.2.169"
+version = "0.2.178"
 
 [target.'cfg(windows)'.dependencies]
 # Use a wider range to avoid duplication of the windows crates in downstream crates

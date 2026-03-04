@@ -1,7 +1,8 @@
 use cfg_if::cfg_if;
 
 cfg_if! {
-    if #[cfg(any(target_os = "linux", target_os = "android"))] {
+    // ioctl_ficlone / FICLONERANGE are not available on SPARC platforms
+    if #[cfg(all(any(target_os = "linux", target_os = "android"), not(any(target_arch = "sparc", target_arch = "sparc64"))))] {
         mod linux;
         pub use linux::reflink;
         pub(crate) use linux::reflink_block;

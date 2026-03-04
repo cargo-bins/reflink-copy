@@ -22,7 +22,7 @@ version = "1.0.1"
 default-features = false
 features = ["fs", "std"]
 
-[target.'cfg(target_os = "linux")'.dependencies.libc]
+[target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies.libc]
 version = "0.2.169"
 
 [target.'cfg(windows)'.dependencies]

@@ -9,6 +9,10 @@ cfg_if! {
         mod macos;
         pub use macos::reflink;
         pub(crate) use super::reflink_block_not_supported as reflink_block;
+    } else if #[cfg(target_os = "freebsd")] {
+        mod freebsd;
+        pub use freebsd::reflink;
+        pub(crate) use super::reflink_block_not_supported as reflink_block;
     } else {
         pub use super::reflink_not_supported as reflink;
         pub(crate) use super::reflink_block_not_supported as reflink_block;

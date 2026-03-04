@@ -27,6 +27,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.29](https://github.com/cargo-bins/reflink-copy/compare/v0.1.28...v0.1.29) - 2026-03-04
+
+### Fixed
+
+- exclude sparc/sparc64 from linux reflink path ([#164](https://github.com/cargo-bins/reflink-copy/pull/164))
+
+### Other
+
+- Bump actions/checkout from 5 to 6 ([#148](https://github.com/cargo-bins/reflink-copy/pull/148))
+
 ## [0.1.26](https://github.com/cargo-bins/reflink-copy/compare/v0.1.25...v0.1.26) - 2025-03-19
 
 ### Other

@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use std::{
-    fs::{remove_file, File},
+    fs::{remove_file, File, Permissions},
     io,
     path::{Path, PathBuf},
 };
@@ -32,8 +32,8 @@ impl AutoRemovedFile {
         self.as_inner_file().as_raw_fd()
     }
 
-    pub fn persist(mut self) {
-        self.inner.take();
+    pub fn persist(mut self, perm: Permissions) -> io::Result<()> {
+        self.inner.take().unwrap().set_permissions(perm)
     }
 
     pub fn as_inner_file(&self) -> &File {

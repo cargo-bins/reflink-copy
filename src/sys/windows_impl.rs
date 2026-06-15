@@ -108,8 +108,7 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
         dest.unset_sparse()?;
     }
 
-    dest.persist();
-    Ok(())
+    dest.persist(src_metadata.permissions())
 }
 
 /// Additional functionality for windows files, needed for reflink

@@ -117,7 +117,7 @@ fn reflink_ok_permissions() {
 
     fs::write(&src_file_path, b"this is a test").unwrap();
 
-    let mut permissions = fs::metadata(&src_file_path).unwrap();
+    let mut permissions = fs::metadata(&src_file_path).unwrap().permissions();
     permissions.set_readonly(true);
     fs::set_permissions(&src_file_path, permissions).unwrap();
 

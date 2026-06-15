@@ -127,7 +127,7 @@ fn reflink_ok_permissions() {
     // assert_eq!(fs::read(&dest_file_path).unwrap(), b"this is a test");
     if res.is_ok() {
         let metadata = fs::metadata(dest_file_path).unwrap();
-        assert_eq!(metadata.permissions().readonly());
+        assert!(metadata.permissions().readonly());
     }
 }
 
@@ -137,7 +137,7 @@ fn reflink_or_copy_ok() {
     let input = tmpdir.path().join("in.txt");
     let out = tmpdir.path().join("out.txt");
 
-    fs::write(&input, b"hello").unwrap no();
+    fs::write(&input, b"hello").unwrap();
 
     reflink_or_copy(&input, &out).unwrap();
 

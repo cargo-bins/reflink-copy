@@ -6,13 +6,13 @@ use crate::sys::utility::AutoRemovedFile;
 
 pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
     let src = fs::File::open(from)?;
+    let permissions = src.metadata()?.permissions();
 
     // pass O_EXCL to mimic macos behaviour
     let dest = AutoRemovedFile::create_new(to)?;
     rustix::fs::ioctl_ficlone(&dest, &src)?;
 
-    dest.persist();
-    Ok(())
+    dest.persist(permissions)
 }
 
 #[cfg(target_os = "linux")]

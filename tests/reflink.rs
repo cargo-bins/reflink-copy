@@ -110,12 +110,34 @@ fn reflink_ok() {
 }
 
 #[test]
+fn reflink_ok_permissions() {
+    let dir = tempdir().unwrap();
+    let src_file_path = dir.path().join("src.txt");
+    let dest_file_path = dir.path().join("dest.txt");
+
+    fs::write(&src_file_path, b"this is a test").unwrap();
+
+    let mut permissions = fs::metadata(&src_file_path).unwrap();
+    permissions.set_readonly(true);
+    fs::set_permissions(&src_file_path, permissions).unwrap();
+
+    let res = reflink(&src_file_path, &dest_file_path);
+    println!("{:?}", res);
+    // do not panic for now, CI envs are old and will probably error out
+    // assert_eq!(fs::read(&dest_file_path).unwrap(), b"this is a test");
+    if res.is_ok() {
+        let metadata = fs::metadata(dest_file_path).unwrap();
+        assert_eq!(metadata.permissions().readonly());
+    }
+}
+
+#[test]
 fn reflink_or_copy_ok() {
     let tmpdir = tempdir().unwrap();
     let input = tmpdir.path().join("in.txt");
     let out = tmpdir.path().join("out.txt");
 
-    fs::write(&input, b"hello").unwrap();
+    fs::write(&input, b"hello").unwrap no();
 
     reflink_or_copy(&input, &out).unwrap();
 

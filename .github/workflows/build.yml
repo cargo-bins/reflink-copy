@@ -69,14 +69,14 @@ jobs:
         drive-size: 1GB
         drive-format: ReFS
         drive-type: Dynamic
-        drive-path: "${{ runner.temp }}/dev-drives/refs1.vhdx"
-        mount-path: "${{ runner.temp }}/dev-drives/refs1"
+        drive-path: "${{ runner.temp }}/refs1.vhdx"
+        mount-path: "${{ runner.temp }}/refs1"
 
     - name: Setup Dev-Drive ReFS2
       if: ${{ matrix.os == 'windows-latest' }}
       uses: samypr100/setup-dev-drive@v3
       with:
-        drive-size: 10GB
+        drive-size: 1GB
         drive-format: ReFS
         drive-type: Dynamic
         drive-path: "${{ runner.temp }}/refs2.vhdx"

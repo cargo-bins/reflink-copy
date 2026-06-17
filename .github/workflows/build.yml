@@ -76,11 +76,11 @@ jobs:
       if: ${{ matrix.os == 'windows-latest' }}
       uses: samypr100/setup-dev-drive@v3
       with:
-        drive-size: 16GB
+        drive-size: 10GB
         drive-format: ReFS
         drive-type: Dynamic
-        drive-path: "${{ runner.temp }}/dev-drives/refs2.vhdx"
-        mount-path: "${{ runner.temp }}/dev-drives/refs2"
+        drive-path: "${{ runner.temp }}/refs2.vhdx"
+        mount-path: "${{ runner.temp }}/refs2"
 
     - name: Setup Dev-Drive NTFS
       if: ${{ matrix.os == 'windows-latest' }}
@@ -89,8 +89,8 @@ jobs:
         drive-size: 1GB
         drive-format: NTFS
         drive-type: Dynamic
-        drive-path: "${{ runner.temp }}/dev-drives/ntfs.vhdx"
-        mount-path: "${{ runner.temp }}/dev-drives/ntfs"
+        drive-path: "${{ runner.temp }}/ntfs.vhdx"
+        mount-path: "${{ runner.temp }}/ntfs"
 
     - name: Test
       if: "! matrix.use-cross"

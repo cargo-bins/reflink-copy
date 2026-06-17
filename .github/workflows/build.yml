@@ -68,7 +68,7 @@ jobs:
       with:
         drive-size: 1GB
         drive-format: ReFS
-        drive-type: Dynamic
+        drive-type: Fixed
         drive-path: "${{ runner.temp }}/refs1.vhdx"
         mount-path: "${{ runner.temp }}/refs1"
 

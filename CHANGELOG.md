@@ -31,7 +31,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Other
 
-- Bump samypr100/setup-dev-drive from 3 to 4 ([#147](https://github.com/cargo-bins/reflink-copy/pull/147))
 - Fix reflink: copy over permissions ([#174](https://github.com/cargo-bins/reflink-copy/pull/174))
 
 ## [0.1.29](https://github.com/cargo-bins/reflink-copy/compare/v0.1.28...v0.1.29) - 2026-03-04

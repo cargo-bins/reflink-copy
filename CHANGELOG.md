@@ -27,6 +27,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.30](https://github.com/cargo-bins/reflink-copy/compare/v0.1.29...v0.1.30) - 2026-06-18
+
+### Other
+
+- Fix reflink: copy over permissions ([#174](https://github.com/cargo-bins/reflink-copy/pull/174))
+
 ## [0.1.29](https://github.com/cargo-bins/reflink-copy/compare/v0.1.28...v0.1.29) - 2026-03-04
 
 ### Fixed

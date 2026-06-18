@@ -18,13 +18,13 @@ fn temp_dir() -> PathBuf {
     PathBuf::from(std::env::var("RUNNER_TEMP").expect("RUNNER_TEMP is not set"))
 }
 fn refs1_dir() -> PathBuf {
-    temp_dir().join("dev-drives").join("refs1")
+    temp_dir().join("refs1")
 }
 fn refs2_dir() -> PathBuf {
-    temp_dir().join("dev-drives").join("refs2")
+    temp_dir().join("refs2")
 }
 fn ntfs_dir() -> PathBuf {
-    temp_dir().join("dev-drives").join("ntfs")
+    temp_dir().join("ntfs")
 }
 
 fn make_subfolder(folder: &Path, line: u32) -> std::io::Result<PathBuf> {
@@ -46,7 +46,7 @@ fn create_test_file(path: &Path) -> std::io::Result<()> {
 #[test]
 #[ignore]
 fn test_correct_deployment() {
-    assert!(temp_dir().join("dev-drives").join("ntfs.vhdx").exists());
+    assert!(temp_dir().join("ntfs.vhdx").exists());
 }
 
 #[test]

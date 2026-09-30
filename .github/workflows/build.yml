@@ -11,7 +11,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
+  test:
     strategy:
       fail-fast: false
       matrix:
@@ -62,8 +62,25 @@ jobs:
 
     - uses: Swatinem/rust-cache@v2
 
+    - name: Test
+      if: "! matrix.use-cross"
+      run: cargo test --target ${{ matrix.target }} -- --show-output
+      env:
+        RUST_BACKTRACE: 1
+
+    - name: Test using cross
+      if: "matrix.use-cross"
+      run: cross test --target ${{ matrix.target }} -- --show-output
+      env:
+        RUST_BACKTRACE: 1
+
+  test-windows-refs:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v7
+
     - name: Setup Dev-Drive ReFS1
-      if: ${{ matrix.os == 'windows-latest' }}
       uses: samypr100/setup-dev-drive@v4
       with:
         drive-size: 1GB
@@ -73,7 +90,6 @@ jobs:
         mount-path: "${{ runner.temp }}/refs1"
 
     - name: Setup Dev-Drive ReFS2
-      if: ${{ matrix.os == 'windows-latest' }}
       uses: samypr100/setup-dev-drive@v4
       with:
         drive-size: 1GB
@@ -83,7 +99,6 @@ jobs:
         mount-path: "${{ runner.temp }}/refs2"
 
     - name: Setup Dev-Drive NTFS
-      if: ${{ matrix.os == 'windows-latest' }}
       uses: samypr100/setup-dev-drive@v4
       with:
         drive-size: 1GB
@@ -92,18 +107,12 @@ jobs:
         drive-path: "${{ runner.temp }}/ntfs.vhdx"
         mount-path: "${{ runner.temp }}/ntfs"
 
+    - uses: Swatinem/rust-cache@v2
     - name: Test
-      if: "! matrix.use-cross"
-      run: cargo test --target ${{ matrix.target }} -- --include-ignored --show-output
+      run: cargo test -- --include-ignored --show-output
       env:
         RUST_BACKTRACE: 1
-
-    - name: Test using cross
-      if: "matrix.use-cross"
-      run: cross test --target ${{ matrix.target }} -- --include-ignored --show-output
-      env:
-        RUST_BACKTRACE: 1
-
+        
   cross-check:
     strategy:
       fail-fast: false

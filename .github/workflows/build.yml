@@ -74,7 +74,7 @@ jobs:
       env:
         RUST_BACKTRACE: 1
 
-test-windows-refs:
+  test-windows-refs:
     runs-on: windows-latest
 
     steps:
@@ -112,7 +112,7 @@ test-windows-refs:
       run: cargo test -- --include-ignored --show-output
       env:
         RUST_BACKTRACE: 1
-  
+        
   cross-check:
     strategy:
       fail-fast: false

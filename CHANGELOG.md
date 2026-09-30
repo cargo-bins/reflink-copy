@@ -27,6 +27,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.31](https://github.com/cargo-bins/reflink-copy/compare/v0.1.30...v0.1.31) - 2026-09-30
+
+### Other
+
+- extract new job test-windows-refs ([#216](https://github.com/cargo-bins/reflink-copy/pull/216))
+- Bump taiki-e/install-action from 2.85.3 to 2.87.20 ([#213](https://github.com/cargo-bins/reflink-copy/pull/213))
+- Bump taiki-e/install-action from 2 to 2.85.3 ([#183](https://github.com/cargo-bins/reflink-copy/pull/183))
+- Bump actions/checkout from 6 to 7 ([#177](https://github.com/cargo-bins/reflink-copy/pull/177))
+
 ## [0.1.30](https://github.com/cargo-bins/reflink-copy/compare/v0.1.29...v0.1.30) - 2026-06-18
 
 ### Other

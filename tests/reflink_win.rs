@@ -142,6 +142,51 @@ fn test_reflink_or_copy_on_unsupported_config() -> std::io::Result<()> {
     Ok(())
 }
 
+/// ReFS can return success for a clone of a source whose data is not on disk yet and leave zeros
+/// in the target. Writing a file and at once cloning it from many threads, as a package manager
+/// does when it links one store file into many projects, triggers this.
+#[test]
+#[ignore]
+fn test_reflink_new_file_from_many_threads() -> std::io::Result<()> {
+    const ROUNDS: usize = 20;
+    const THREADS: usize = 8;
+    let folder = make_subfolder(&refs1_dir(), line!())?;
+    for round in 0..ROUNDS {
+        for size in [CLUSTER_SIZE / 2, 3 * 1024 * 1024 + 1] {
+            let from = folder.join(format!("source_{round}_{size}.dat"));
+            let data: Vec<u8> = (0..size).map(|i| (i % 251) as u8 + 1).collect();
+            std::fs::write(&from, &data)?;
+
+            let targets: Vec<PathBuf> = (0..THREADS)
+                .map(|thread| folder.join(format!("target_{round}_{size}_{thread}.dat")))
+                .collect();
+            let from = &from;
+            std::thread::scope(|scope| {
+                let clones: Vec<_> = targets
+                    .iter()
+                    .map(|to| scope.spawn(move || reflink(from, to)))
+                    .collect();
+                clones
+                    .into_iter()
+                    .try_for_each(|clone| clone.join().unwrap())
+            })?;
+
+            for to in &targets {
+                let cloned = std::fs::read(to)?;
+                let first_difference = cloned.iter().zip(&data).position(|(a, b)| a != b);
+                assert_eq!(
+                    (cloned.len(), first_difference),
+                    (data.len(), None),
+                    "{} differs from {}",
+                    to.display(),
+                    from.display()
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
 fn compare_files_eq(file1: &Path, file2: &Path) -> std::io::Result<()> {
     let mut f1 = File::open(file1)?;
     let mut f2 = File::open(file2)?;

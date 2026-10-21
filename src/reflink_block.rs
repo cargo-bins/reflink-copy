@@ -48,6 +48,11 @@ use std::num::NonZeroU64;
 /// - If the file size is not aligned to the cluster size, the reflink operation should still
 ///   be aligned by the cluster size. For example, to reflink the whole file with size of 7000 bytes
 ///   and a cluster size of 4096 bytes, `src_length` should be 8192 bytes.
+/// - The source should have no cached data that is not on disk. If it can, call
+///   [`File::sync_data`](fn@std::fs::File::sync_data) on a handle with write access first.
+///   Otherwise ReFS can give the destination zeros for that data, most often when other threads
+///   clone the same source at the same time
+///   ([details](https://github.com/microsoft/CopyOnWrite/issues/12)).
 ///
 /// > Note: In order to handle blocks larger than 4GB,
 ///   [`ReflinkBlockBuilder::reflink_block`] splits these big blocks into smaller ones.

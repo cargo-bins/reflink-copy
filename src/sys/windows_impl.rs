@@ -5,7 +5,7 @@ use std::num::NonZeroU64;
 use std::{
     convert::TryInto,
     ffi::c_void,
-    fs::File,
+    fs::{File, OpenOptions},
     io,
     mem::{self, MaybeUninit},
     os::windows::{ffi::OsStrExt, fs::MetadataExt, io::AsRawHandle},
@@ -33,6 +33,7 @@ use windows::Win32::{
 
 pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
     // Inspired by https://github.com/0xbadfca11/reflink/blob/master/reflink.cpp
+    flush_source(from)?;
     let src = File::open(from)?;
 
     let src_metadata = src.metadata()?;
@@ -109,6 +110,24 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
     }
 
     dest.persist(src_metadata.permissions())
+}
+
+/// Writes the cached data of `from` to disk before its extents are cloned.
+///
+/// ReFS can report success for `FSCTL_DUPLICATE_EXTENTS_TO_FILE` and still give
+/// the target zeros where the source has cached data that is not on disk yet.
+/// This happens when other threads or processes clone the same source at the
+/// same time, for example right after the source was written.
+/// See <https://github.com/microsoft/CopyOnWrite/issues/12>.
+///
+/// `FlushFileBuffers` needs a handle with write access. A source that cannot be
+/// opened for writing (read-only, denied by its ACL, or in use) is cloned
+/// without the flush.
+fn flush_source(from: &Path) -> io::Result<()> {
+    match OpenOptions::new().write(true).open(from) {
+        Ok(file) => file.sync_data(),
+        Err(_) => Ok(()),
+    }
 }
 
 /// Additional functionality for windows files, needed for reflink

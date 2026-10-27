@@ -375,6 +375,17 @@ pub(crate) fn reflink_block(
             .map(NonZeroU64::get)
             .unwrap_or(MAX_REFS_CLUSTER_SIZE);
 
+    // Best effort: a source that cannot be flushed is cloned without the flush.
+    let source = SourceMapping::new(from);
+    if let Err(_e) = &source {
+        #[cfg(feature = "tracing")]
+        tracing::warn!(
+            ?_e,
+            "Failed to map the source to flush it before cloning it"
+        );
+    }
+    let source = source.ok().flatten();
+
     let mut bytes_copied = 0;
     while bytes_copied < src_length {
         let bytes_to_copy = max_io_size.min(src_length - bytes_copied);
@@ -383,10 +394,11 @@ pub(crate) fn reflink_block(
             debug_assert_eq!(bytes_copied % cluster_size, 0);
         }
 
-        // Best effort: a source range that cannot be flushed is cloned without the flush.
-        if let Err(_e) = flush_source_range(from, from_offset + bytes_copied, bytes_to_copy) {
-            #[cfg(feature = "tracing")]
-            tracing::warn!(?_e, "Failed to flush the source range before cloning it");
+        if let Some(source) = &source {
+            if let Err(_e) = source.flush(from_offset + bytes_copied, bytes_to_copy) {
+                #[cfg(feature = "tracing")]
+                tracing::warn!(?_e, "Failed to flush the source range before cloning it");
+            }
         }
 
         duplicate_extent_to_file(
@@ -403,7 +415,7 @@ pub(crate) fn reflink_block(
     Ok(())
 }
 
-/// Writes the cached data in `offset..offset + len` of `file` to disk.
+/// A read-only mapping of a clone source, used to write its cached data to disk.
 ///
 /// ReFS can report success for `FSCTL_DUPLICATE_EXTENTS_TO_FILE` and still give
 /// the target zeros where the source has cached data that is not on disk yet.
@@ -413,25 +425,46 @@ pub(crate) fn reflink_block(
 ///
 /// `FlushFileBuffers` needs a handle with write access. Flushing a read-only view
 /// of the file needs only read access, which the clone needs anyway.
-fn flush_source_range(file: &File, offset: u64, len: u64) -> io::Result<()> {
-    // Bounds the address space a view takes, which matters for 32-bit processes.
-    // A multiple of the allocation granularity, so every view starts on one.
-    const MAX_VIEW_LEN: u64 = 64 * 1024 * 1024;
+struct SourceMapping {
+    mapping: FileMapping,
+    file_len: u64,
+    allocation_granularity: u64,
+}
 
-    // A view cannot extend past the end of the file, and the range to clone often does.
-    let end = offset.saturating_add(len).min(file.metadata()?.len());
-    if end <= offset {
-        return Ok(());
+impl SourceMapping {
+    /// `None` for an empty file, which cannot be mapped and has nothing to flush.
+    fn new(file: &File) -> io::Result<Option<Self>> {
+        let file_len = file.metadata()?.len();
+        if file_len == 0 {
+            return Ok(None);
+        }
+        Ok(Some(Self {
+            mapping: FileMapping::read_only(file)?,
+            file_len,
+            allocation_granularity: allocation_granularity(),
+        }))
     }
 
-    let mapping = FileMapping::read_only(file)?;
-    let mut view_start = offset - offset % allocation_granularity();
-    while view_start < end {
-        let view_len = (end - view_start).min(MAX_VIEW_LEN);
-        mapping.view(view_start, view_len as usize)?.flush()?;
-        view_start += view_len;
+    /// Writes the cached data in `offset..offset + len` to disk.
+    fn flush(&self, offset: u64, len: u64) -> io::Result<()> {
+        // Bounds the address space a view takes, which matters for 32-bit processes.
+        // A multiple of the allocation granularity, so every view starts on one.
+        const MAX_VIEW_LEN: u64 = 64 * 1024 * 1024;
+
+        // A view cannot extend past the end of the file, and the range to clone often does.
+        let end = offset.saturating_add(len).min(self.file_len);
+        if end <= offset {
+            return Ok(());
+        }
+
+        let mut view_start = offset - offset % self.allocation_granularity;
+        while view_start < end {
+            let view_len = (end - view_start).min(MAX_VIEW_LEN);
+            self.mapping.view(view_start, view_len as usize)?.flush()?;
+            view_start += view_len;
+        }
+        Ok(())
     }
-    Ok(())
 }
 
 /// A view must start at a multiple of this.
@@ -471,7 +504,10 @@ impl FileMapping {
 
 impl Drop for FileMapping {
     fn drop(&mut self) {
-        let _ = unsafe { CloseHandle(self.0) };
+        if let Err(_e) = unsafe { CloseHandle(self.0) } {
+            #[cfg(feature = "tracing")]
+            tracing::warn!(?_e, "Failed to close the file mapping of the source");
+        }
     }
 }
 
@@ -490,7 +526,10 @@ impl MappedView {
 
 impl Drop for MappedView {
     fn drop(&mut self) {
-        let _ = unsafe { UnmapViewOfFile(self.address) };
+        if let Err(_e) = unsafe { UnmapViewOfFile(self.address) } {
+            #[cfg(feature = "tracing")]
+            tracing::warn!(?_e, "Failed to unmap the view of the source");
+        }
     }
 }
 
@@ -582,12 +621,12 @@ mod test {
     }
 
     #[test]
-    fn test_flush_source_range() -> io::Result<()> {
+    fn test_source_mapping_flush() -> io::Result<()> {
         let dir = tempfile::tempdir()?;
 
         let empty = dir.path().join("empty");
         std::fs::write(&empty, b"")?;
-        flush_source_range(&File::open(&empty)?, 0, 4096)?;
+        assert!(SourceMapping::new(&File::open(&empty)?)?.is_none());
 
         // A read-only file opened for reading only can still be flushed.
         let path = dir.path().join("data");
@@ -597,15 +636,16 @@ mod test {
         permissions.set_readonly(true);
         std::fs::set_permissions(&path, permissions)?;
         let file = File::open(&path)?;
+        let source = SourceMapping::new(&file)?.expect("a file with data is mapped");
 
         let len = len as u64;
-        flush_source_range(&file, 0, len)?;
+        source.flush(0, len)?;
         // Not on an allocation granularity boundary.
-        flush_source_range(&file, 100_000, 200_000)?;
+        source.flush(100_000, 200_000)?;
         // Ends past the end of the file, as a range rounded up to the cluster size does.
-        flush_source_range(&file, 1024 * 1024, 64 * 1024)?;
+        source.flush(1024 * 1024, 64 * 1024)?;
         // Starts past the end of the file.
-        flush_source_range(&file, 2 * len, 4096)?;
+        source.flush(2 * len, 4096)?;
         Ok(())
     }
 }

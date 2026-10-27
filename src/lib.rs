@@ -52,6 +52,10 @@ use std::path::Path;
 ///
 /// Uses ioctl `FSCTL_DUPLICATE_EXTENTS_TO_FILE`.
 ///
+/// Before the clone, the cached data of the source is written to disk through a read-only view of
+/// the file (`FlushViewOfFile`). Without this, ReFS can give the target zeros where the source has
+/// cached data that is not on disk yet ([details](https://github.com/microsoft/CopyOnWrite/issues/12)).
+///
 /// Supports ReFS on Windows Server and Windows Dev Drives. *Important note*: The windows implementation is currently
 /// untested and probably buggy. Contributions/testers with access to a Windows Server or Dev Drives are welcome.
 /// [More Information on Dev Drives](https://learn.microsoft.com/en-US/windows/dev-drive/#how-does-dev-drive-work)

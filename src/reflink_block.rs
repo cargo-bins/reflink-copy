@@ -5,8 +5,9 @@ use std::num::NonZeroU64;
 
 /// Creates a reflink of a specified block from one file to another.
 ///
-/// This functionality is designed to be highly performant and does not perform any extra API calls.
-/// It is expected that the user takes care of necessary preliminary checks and preparations.
+/// This functionality is designed to be highly performant and does not perform any extra API calls,
+/// except for the flush of the source range on Windows described below. It is expected that the user
+/// takes care of necessary preliminary checks and preparations.
 ///
 /// If you need to clone an entire file, consider using the [`reflink`] or [`reflink_or_copy`]
 /// functions instead.
@@ -48,6 +49,11 @@ use std::num::NonZeroU64;
 /// - If the file size is not aligned to the cluster size, the reflink operation should still
 ///   be aligned by the cluster size. For example, to reflink the whole file with size of 7000 bytes
 ///   and a cluster size of 4096 bytes, `src_length` should be 8192 bytes.
+/// - Before each clone, the cached data of the source range is written to disk through a read-only
+///   view of the file. Without this, ReFS can give the destination zeros for data that is not on
+///   disk yet, most often when other threads clone the same source at the same time
+///   ([details](https://github.com/microsoft/CopyOnWrite/issues/12)). If the flush fails, the
+///   clone runs without it.
 ///
 /// > Note: In order to handle blocks larger than 4GB,
 ///   [`ReflinkBlockBuilder::reflink_block`] splits these big blocks into smaller ones.

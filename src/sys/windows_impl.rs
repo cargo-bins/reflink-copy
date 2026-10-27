@@ -5,7 +5,7 @@ use std::num::NonZeroU64;
 use std::{
     convert::TryInto,
     ffi::c_void,
-    fs::{File, OpenOptions},
+    fs::File,
     io,
     mem::{self, MaybeUninit},
     os::windows::{ffi::OsStrExt, fs::MetadataExt, io::AsRawHandle},
@@ -14,7 +14,7 @@ use std::{
 
 use windows::core::PCWSTR;
 use windows::Win32::{
-    Foundation::{HANDLE, MAX_PATH},
+    Foundation::{CloseHandle, HANDLE, MAX_PATH},
     Storage::FileSystem::{
         GetVolumeInformationByHandleW, GetVolumeInformationW, GetVolumeNameForVolumeMountPointW,
         GetVolumePathNameW, FILE_ATTRIBUTE_SPARSE_FILE, FILE_FLAGS_AND_ATTRIBUTES,
@@ -26,6 +26,11 @@ use windows::Win32::{
             FSCTL_SET_INTEGRITY_INFORMATION, FSCTL_SET_INTEGRITY_INFORMATION_BUFFER,
             FSCTL_SET_SPARSE,
         },
+        Memory::{
+            CreateFileMappingW, FlushViewOfFile, MapViewOfFile, UnmapViewOfFile, FILE_MAP_READ,
+            MEMORY_MAPPED_VIEW_ADDRESS, PAGE_READONLY,
+        },
+        SystemInformation::{GetSystemInfo, SYSTEM_INFO},
         SystemServices::FILE_SUPPORTS_BLOCK_REFCOUNTING,
         IO::DeviceIoControl,
     },
@@ -33,7 +38,6 @@ use windows::Win32::{
 
 pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
     // Inspired by https://github.com/0xbadfca11/reflink/blob/master/reflink.cpp
-    flush_source(from)?;
     let src = File::open(from)?;
 
     let src_metadata = src.metadata()?;
@@ -110,24 +114,6 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
     }
 
     dest.persist(src_metadata.permissions())
-}
-
-/// Writes the cached data of `from` to disk before its extents are cloned.
-///
-/// ReFS can report success for `FSCTL_DUPLICATE_EXTENTS_TO_FILE` and still give
-/// the target zeros where the source has cached data that is not on disk yet.
-/// This happens when other threads or processes clone the same source at the
-/// same time, for example right after the source was written.
-/// See <https://github.com/microsoft/CopyOnWrite/issues/12>.
-///
-/// `FlushFileBuffers` needs a handle with write access. A source that cannot be
-/// opened for writing (read-only, denied by its ACL, or in use) is cloned
-/// without the flush.
-fn flush_source(from: &Path) -> io::Result<()> {
-    match OpenOptions::new().write(true).open(from) {
-        Ok(file) => file.sync_data(),
-        Err(_) => Ok(()),
-    }
 }
 
 /// Additional functionality for windows files, needed for reflink
@@ -397,6 +383,12 @@ pub(crate) fn reflink_block(
             debug_assert_eq!(bytes_copied % cluster_size, 0);
         }
 
+        // Best effort: a source range that cannot be flushed is cloned without the flush.
+        if let Err(_e) = flush_source_range(from, from_offset + bytes_copied, bytes_to_copy) {
+            #[cfg(feature = "tracing")]
+            tracing::warn!(?_e, "Failed to flush the source range before cloning it");
+        }
+
         duplicate_extent_to_file(
             from,
             from_offset + bytes_copied,
@@ -409,6 +401,97 @@ pub(crate) fn reflink_block(
     }
 
     Ok(())
+}
+
+/// Writes the cached data in `offset..offset + len` of `file` to disk.
+///
+/// ReFS can report success for `FSCTL_DUPLICATE_EXTENTS_TO_FILE` and still give
+/// the target zeros where the source has cached data that is not on disk yet.
+/// This happens when other threads or processes clone the same source at the
+/// same time, for example right after the source was written.
+/// See <https://github.com/microsoft/CopyOnWrite/issues/12>.
+///
+/// `FlushFileBuffers` needs a handle with write access. Flushing a read-only view
+/// of the file needs only read access, which the clone needs anyway.
+fn flush_source_range(file: &File, offset: u64, len: u64) -> io::Result<()> {
+    // Bounds the address space a view takes, which matters for 32-bit processes.
+    // A multiple of the allocation granularity, so every view starts on one.
+    const MAX_VIEW_LEN: u64 = 64 * 1024 * 1024;
+
+    // A view cannot extend past the end of the file, and the range to clone often does.
+    let end = offset.saturating_add(len).min(file.metadata()?.len());
+    if end <= offset {
+        return Ok(());
+    }
+
+    let mapping = FileMapping::read_only(file)?;
+    let mut view_start = offset - offset % allocation_granularity();
+    while view_start < end {
+        let view_len = (end - view_start).min(MAX_VIEW_LEN);
+        mapping.view(view_start, view_len as usize)?.flush()?;
+        view_start += view_len;
+    }
+    Ok(())
+}
+
+/// A view must start at a multiple of this.
+fn allocation_granularity() -> u64 {
+    let mut info = SYSTEM_INFO::default();
+    unsafe { GetSystemInfo(&mut info) };
+    info.dwAllocationGranularity.into()
+}
+
+/// A read-only file mapping object, closed on drop.
+struct FileMapping(HANDLE);
+
+impl FileMapping {
+    fn read_only(file: &File) -> io::Result<Self> {
+        let handle = unsafe {
+            CreateFileMappingW(file.as_handle(), None, PAGE_READONLY, 0, 0, PCWSTR::null())
+        }?;
+        Ok(Self(handle))
+    }
+
+    fn view(&self, offset: u64, len: usize) -> io::Result<MappedView> {
+        let address = unsafe {
+            MapViewOfFile(
+                self.0,
+                FILE_MAP_READ,
+                (offset >> 32) as u32,
+                offset as u32,
+                len,
+            )
+        };
+        if address.Value.is_null() {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(MappedView { address, len })
+    }
+}
+
+impl Drop for FileMapping {
+    fn drop(&mut self) {
+        let _ = unsafe { CloseHandle(self.0) };
+    }
+}
+
+/// A mapped view of a file, unmapped on drop.
+struct MappedView {
+    address: MEMORY_MAPPED_VIEW_ADDRESS,
+    len: usize,
+}
+
+impl MappedView {
+    fn flush(&self) -> io::Result<()> {
+        unsafe { FlushViewOfFile(self.address.Value, self.len) }?;
+        Ok(())
+    }
+}
+
+impl Drop for MappedView {
+    fn drop(&mut self) {
+        let _ = unsafe { UnmapViewOfFile(self.address) };
+    }
 }
 
 fn duplicate_extent_to_file(
@@ -495,6 +578,34 @@ mod test {
         let volume_path = get_volume_path(".")?;
         let volume_flags = get_volume_flags(&volume_path)?;
         assert!(volume_flags > 0);
+        Ok(())
+    }
+
+    #[test]
+    fn test_flush_source_range() -> io::Result<()> {
+        let dir = tempfile::tempdir()?;
+
+        let empty = dir.path().join("empty");
+        std::fs::write(&empty, b"")?;
+        flush_source_range(&File::open(&empty)?, 0, 4096)?;
+
+        // A read-only file opened for reading only can still be flushed.
+        let path = dir.path().join("data");
+        let len = 1024 * 1024 + 1;
+        std::fs::write(&path, vec![1u8; len])?;
+        let mut permissions = std::fs::metadata(&path)?.permissions();
+        permissions.set_readonly(true);
+        std::fs::set_permissions(&path, permissions)?;
+        let file = File::open(&path)?;
+
+        let len = len as u64;
+        flush_source_range(&file, 0, len)?;
+        // Not on an allocation granularity boundary.
+        flush_source_range(&file, 100_000, 200_000)?;
+        // Ends past the end of the file, as a range rounded up to the cluster size does.
+        flush_source_range(&file, 1024 * 1024, 64 * 1024)?;
+        // Starts past the end of the file.
+        flush_source_range(&file, 2 * len, 4096)?;
         Ok(())
     }
 }

@@ -142,20 +142,57 @@ fn test_reflink_or_copy_on_unsupported_config() -> std::io::Result<()> {
     Ok(())
 }
 
+#[derive(Clone, Copy)]
+enum Source {
+    Writable,
+    ReadOnly,
+}
+
+#[derive(Clone, Copy)]
+enum CloneWith {
+    Reflink,
+    ReflinkBlock,
+}
+
+fn clone_new_file(with: CloneWith, from: &Path, to: &Path, len: usize) -> std::io::Result<()> {
+    match with {
+        CloneWith::Reflink => reflink(from, to),
+        CloneWith::ReflinkBlock => {
+            let source = File::open(from)?;
+            let destination = File::create_new(to)?;
+            destination.set_len(len as u64)?;
+            ReflinkBlockBuilder::new(&source, &destination, NonZeroU64::new(len as u64).unwrap())
+                .reflink_block()
+        }
+    }
+}
+
 /// ReFS can return success for a clone of a source whose data is not on disk yet and leave zeros
 /// in the target. Writing a file and at once cloning it from many threads, as a package manager
 /// does when it links one store file into many projects, triggers this.
-#[test]
-#[ignore]
-fn test_reflink_new_file_from_many_threads() -> std::io::Result<()> {
+fn clone_new_files_from_many_threads(
+    folder: &Path,
+    source: Source,
+    with: CloneWith,
+) -> std::io::Result<()> {
     const ROUNDS: usize = 20;
     const THREADS: usize = 8;
-    let folder = make_subfolder(&refs1_dir(), line!())?;
+    let sizes = match with {
+        // `reflink` rounds the length up to the cluster size itself.
+        CloneWith::Reflink => [CLUSTER_SIZE / 2, 3 * 1024 * 1024 + 1],
+        // Multiples of 64 KiB, the largest ReFS cluster size, so the block is aligned on any volume.
+        CloneWith::ReflinkBlock => [64 * 1024, 3 * 1024 * 1024],
+    };
     for round in 0..ROUNDS {
-        for size in [CLUSTER_SIZE / 2, 3 * 1024 * 1024 + 1] {
+        for size in sizes {
             let from = folder.join(format!("source_{round}_{size}.dat"));
             let data: Vec<u8> = (0..size).map(|i| (i % 251) as u8 + 1).collect();
             std::fs::write(&from, &data)?;
+            if let Source::ReadOnly = source {
+                let mut permissions = std::fs::metadata(&from)?.permissions();
+                permissions.set_readonly(true);
+                std::fs::set_permissions(&from, permissions)?;
+            }
 
             let targets: Vec<PathBuf> = (0..THREADS)
                 .map(|thread| folder.join(format!("target_{round}_{size}_{thread}.dat")))
@@ -164,7 +201,7 @@ fn test_reflink_new_file_from_many_threads() -> std::io::Result<()> {
             std::thread::scope(|scope| {
                 let clones: Vec<_> = targets
                     .iter()
-                    .map(|to| scope.spawn(move || reflink(from, to)))
+                    .map(|to| scope.spawn(move || clone_new_file(with, from, to, size)))
                     .collect();
                 clones
                     .into_iter()
@@ -185,6 +222,27 @@ fn test_reflink_new_file_from_many_threads() -> std::io::Result<()> {
         }
     }
     Ok(())
+}
+
+#[test]
+#[ignore]
+fn test_reflink_new_file_from_many_threads() -> std::io::Result<()> {
+    let folder = make_subfolder(&refs1_dir(), line!())?;
+    clone_new_files_from_many_threads(&folder, Source::Writable, CloneWith::Reflink)
+}
+
+#[test]
+#[ignore]
+fn test_reflink_new_read_only_file_from_many_threads() -> std::io::Result<()> {
+    let folder = make_subfolder(&refs1_dir(), line!())?;
+    clone_new_files_from_many_threads(&folder, Source::ReadOnly, CloneWith::Reflink)
+}
+
+#[test]
+#[ignore]
+fn test_reflink_block_new_file_from_many_threads() -> std::io::Result<()> {
+    let folder = make_subfolder(&refs2_dir(), line!())?;
+    clone_new_files_from_many_threads(&folder, Source::Writable, CloneWith::ReflinkBlock)
 }
 
 fn compare_files_eq(file1: &Path, file2: &Path) -> std::io::Result<()> {

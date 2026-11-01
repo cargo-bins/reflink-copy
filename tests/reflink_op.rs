@@ -76,14 +76,13 @@ fn file_to_new_file() {
     }
 }
 
-#[test]
-fn file_to_existing_larger_file() {
+fn reflink_to_existing_larger_file(src_data: &[u8]) {
     let (dir, must_succeed) = test_dir();
     let src_path = dir.path().join("src");
-    fs::write(&src_path, data()).unwrap();
+    fs::write(&src_path, src_data).unwrap();
 
     let dest_path = dir.path().join("dest");
-    fs::write(&dest_path, vec![0xffu8; DATA_LEN * 2]).unwrap();
+    fs::write(&dest_path, vec![0xffu8; src_data.len() * 2]).unwrap();
 
     let src = File::open(&src_path).unwrap();
     let dest = File::options()
@@ -93,8 +92,22 @@ fn file_to_existing_larger_file() {
         .unwrap();
 
     if check_file_result(src.reflink(&dest), must_succeed) {
-        assert_eq!(read_all(&dest), data());
+        assert_eq!(read_all(&dest), src_data);
     }
+}
+
+/// On Linux, FICLONE rejects an unaligned source into a larger destination
+/// with EINVAL.
+#[test]
+fn file_to_existing_larger_file_unaligned() {
+    reflink_to_existing_larger_file(&data());
+}
+
+/// On Linux, FICLONE accepts a block aligned source into a larger
+/// destination but keeps the destination's tail.
+#[test]
+fn file_to_existing_larger_file_aligned() {
+    reflink_to_existing_larger_file(&data()[..3 * 64 * 1024]);
 }
 
 #[cfg(unix)]

@@ -16,9 +16,11 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
 }
 
 pub fn reflink_file(from: &fs::File, to: &fs::File) -> io::Result<()> {
-    // FICLONE fails with EINVAL if `to` is larger than `from` and `from`
-    // does not end at a block boundary, so truncate it first to
-    // "replace" the content, consistent with the windows implementation.
+    // FICLONE never shrinks `to`: if `to` is larger than `from`, it either
+    // keeps the old tail of `to` (`from` ends at a block boundary) or fails
+    // with EINVAL (it does not, since a partial block cannot be cloned into
+    // the middle of a file). Truncate it first to replace the content,
+    // consistent with the windows implementation.
     if to.metadata()?.len() != 0 {
         to.set_len(0)?;
     }

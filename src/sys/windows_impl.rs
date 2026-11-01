@@ -40,22 +40,18 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
 }
 
 pub fn reflink_file_to_path(from: &File, to: &Path) -> io::Result<()> {
-    let permissions = from.metadata()?.permissions();
-
     let dest = AutoRemovedFile::create_new(to)?;
     reflink_file(from, dest.as_inner_file())?;
 
-    dest.persist(permissions)
+    dest.persist_with_same_permission_as(from)
 }
 
 #[cfg(feature = "cap-std")]
 pub fn reflink_file_to_dir(from: &File, dir: &cap_std::fs::Dir, to: &Path) -> io::Result<()> {
-    let permissions = from.metadata()?.permissions();
-
     let dest = AutoRemovedFile::create_new_in(dir, to)?;
     reflink_file(from, dest.as_inner_file())?;
 
-    dest.persist(permissions)
+    dest.persist_with_same_permission_as(from)
 }
 
 /// Reflink the whole content of `src` into `dest`.

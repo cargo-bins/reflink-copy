@@ -9,24 +9,20 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
 }
 
 pub fn reflink_file_to_path(from: &fs::File, to: &Path) -> io::Result<()> {
-    let permissions = from.metadata()?.permissions();
-
     // pass O_EXCL to mimic macos behaviour
     let dest = AutoRemovedFile::create_new(to)?;
     rustix::fs::ioctl_ficlone(&dest, from)?;
 
-    dest.persist(permissions)
+    dest.persist_with_same_permission_as(from)
 }
 
 #[cfg(feature = "cap-std")]
 pub fn reflink_file_to_dir(from: &fs::File, dir: &cap_std::fs::Dir, to: &Path) -> io::Result<()> {
-    let permissions = from.metadata()?.permissions();
-
     // pass O_EXCL to mimic macos behaviour
     let dest = AutoRemovedFile::create_new_in(dir, to)?;
     rustix::fs::ioctl_ficlone(&dest, from)?;
 
-    dest.persist(permissions)
+    dest.persist_with_same_permission_as(from)
 }
 
 pub fn reflink_file(from: &fs::File, to: &fs::File) -> io::Result<()> {

@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use std::{
-    fs::{remove_file, File, Permissions},
+    fs::{remove_file, File},
     io,
     path::Path,
 };
@@ -9,8 +9,8 @@ use std::{
 #[cfg(unix)]
 use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, RawFd};
 
-/// A newly created file, removed on drop unless [`AutoRemovedFile::persist`]
-/// is called.
+/// A newly created file, removed on drop unless
+/// [`AutoRemovedFile::persist_with_same_permission_as`] is called.
 #[derive(Debug)]
 pub(super) struct AutoRemovedFile<'a> {
     // Option<File> uses File's niche, so this is zero cost
@@ -57,8 +57,10 @@ impl<'a> AutoRemovedFile<'a> {
         self.as_inner_file().as_raw_fd()
     }
 
-    pub fn persist(mut self, perm: Permissions) -> io::Result<()> {
-        self.inner.take().unwrap().set_permissions(perm)
+    /// Keep the file, giving it the same permissions as `file`.
+    pub fn persist_with_same_permission_as(mut self, file: &File) -> io::Result<()> {
+        let permissions = file.metadata()?.permissions();
+        self.inner.take().unwrap().set_permissions(permissions)
     }
 
     pub fn as_inner_file(&self) -> &File {
@@ -75,11 +77,10 @@ impl AsFd for AutoRemovedFile<'_> {
 
 impl Drop for AutoRemovedFile<'_> {
     fn drop(&mut self) {
-        let Some(file) = self.inner.take() else {
+        // Close it first, an opened file may not be removable on windows.
+        let Some(_) = self.inner.take() else {
             return;
         };
-        // Close it first, an opened file may not be removable on windows.
-        drop(file);
 
         #[cfg(all(feature = "cap-std", any(unix, windows)))]
         let res = match self.dir {

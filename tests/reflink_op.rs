@@ -249,10 +249,11 @@ fn file_to_path_copies_permissions() {
     }
 }
 
-#[cfg(all(feature = "cap-std", target_os = "linux"))]
+#[cfg(all(feature = "cap-std", any(unix, windows)))]
 mod cap_std_tests {
     use super::*;
     use cap_std::{ambient_authority, fs::Dir};
+    use reflink_copy::DirPath;
 
     fn open_dir(dir: &TempDir) -> Dir {
         let dir = Dir::open_ambient_dir(dir.path(), ambient_authority()).unwrap();
@@ -288,18 +289,135 @@ mod cap_std_tests {
         let (tmp, must_succeed) = test_dir();
         let dir = open_dir(&tmp);
 
-        let src = dir.open("src").unwrap();
+        // Block cloning needs cluster aligned lengths on windows.
+        let len = 3 * 64 * 1024;
+        dir.write("aligned_src", &data()[..len]).unwrap();
+        let src = dir.open("aligned_src").unwrap();
         let dest = create_dest(&dir, "dest");
-        dest.set_len(DATA_LEN as u64).unwrap();
+        dest.set_len(len as u64).unwrap();
 
-        let res = ReflinkBlockBuilder::new_cap_std(
-            &src,
-            &dest,
-            NonZeroU64::new(DATA_LEN as u64).unwrap(),
-        )
-        .reflink_block();
+        let res =
+            ReflinkBlockBuilder::new_cap_std(&src, &dest, NonZeroU64::new(len as u64).unwrap())
+                .reflink_block();
         if check_file_result(res, must_succeed) {
-            assert_eq!(read_all_cap(&dest), data());
+            assert_eq!(read_all_cap(&dest), &data()[..len]);
+        }
+    }
+
+    /// Check the result of a reflink into a `DirPath`, return `true` if the
+    /// content should be checked.
+    fn check_dir_path_result(res: io::Result<()>, must_succeed: bool) -> bool {
+        match res {
+            Ok(()) if FILE_TO_PATH_SUPPORTED => true,
+            Ok(()) => panic!("reflink into DirPath should be unsupported on this platform"),
+            Err(err) if !FILE_TO_PATH_SUPPORTED => {
+                assert_eq!(err.kind(), io::ErrorKind::Unsupported, "{:?}", err);
+                false
+            }
+            Err(err) => {
+                assert!(!must_succeed, "reflink failed: {:?}", err);
+                println!("reflink failed (tolerated): {:?}", err);
+                false
+            }
+        }
+    }
+
+    #[test]
+    fn file_to_dir_path() {
+        let (tmp, must_succeed) = test_dir();
+        let dir = open_dir(&tmp);
+        dir.create_dir("sub").unwrap();
+        let src = File::open(tmp.path().join("src")).unwrap();
+
+        for name in ["dest", "sub/dest"] {
+            let res = src.reflink(&DirPath::new(&dir, name));
+            if check_dir_path_result(res, must_succeed) {
+                assert_eq!(fs::read(tmp.path().join(name)).unwrap(), data());
+            } else {
+                // The dest file is removed on failure.
+                assert!(!tmp.path().join(name).exists());
+            }
+        }
+    }
+
+    #[test]
+    fn dir_path_to_dir_path() {
+        let (tmp, must_succeed) = test_dir();
+        let dir = open_dir(&tmp);
+
+        let src_tmp = tempfile::tempdir_in(tmp.path()).unwrap();
+        let src_dir = Dir::open_ambient_dir(src_tmp.path(), ambient_authority()).unwrap();
+        src_dir.write("src", data()).unwrap();
+
+        let res = DirPath::new(&src_dir, "src").reflink(&DirPath::new(&dir, "dest"));
+        if check_dir_path_result(res, must_succeed) {
+            assert_eq!(fs::read(tmp.path().join("dest")).unwrap(), data());
+        }
+
+        // The source is bounded too.
+        let name = src_tmp.path().file_name().unwrap();
+        let escaping = Path::new("..").join(name).join("src");
+        DirPath::new(&src_dir, &escaping)
+            .reflink(&DirPath::new(&dir, "dest3"))
+            .unwrap_err();
+        assert!(!tmp.path().join("dest3").exists());
+    }
+
+    #[test]
+    fn dir_path_cannot_escape() {
+        let (tmp, _) = test_dir();
+        let dir = open_dir(&tmp);
+        dir.create_dir("sub").unwrap();
+        let sub = dir.open_dir("sub").unwrap();
+        let src = File::open(tmp.path().join("src")).unwrap();
+
+        let outside = tmp.path().join("outside");
+        for path in [Path::new("../outside"), outside.as_path()] {
+            src.reflink(&DirPath::new(&sub, path)).unwrap_err();
+            assert!(!outside.exists(), "{}", path.display());
+        }
+
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(tmp.path(), tmp.path().join("sub/link")).unwrap();
+            src.reflink(&DirPath::new(&sub, "link/outside"))
+                .unwrap_err();
+            assert!(!outside.exists());
+        }
+    }
+
+    #[test]
+    fn file_to_existing_dir_path() {
+        let (tmp, _) = test_dir();
+        let dir = open_dir(&tmp);
+        let src = File::open(tmp.path().join("src")).unwrap();
+        dir.write("existing", b"hello").unwrap();
+
+        let err = src.reflink(&DirPath::new(&dir, "existing")).unwrap_err();
+        if FILE_TO_PATH_SUPPORTED {
+            assert_eq!(err.kind(), io::ErrorKind::AlreadyExists, "{:?}", err);
+        }
+        assert_eq!(fs::read(tmp.path().join("existing")).unwrap(), b"hello");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn file_to_dir_path_copies_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let (tmp, must_succeed) = test_dir();
+        let dir = open_dir(&tmp);
+        let src_path = tmp.path().join("src");
+        fs::set_permissions(&src_path, fs::Permissions::from_mode(0o751)).unwrap();
+        let src = File::open(&src_path).unwrap();
+
+        let res = src.reflink(&DirPath::new(&dir, "dest"));
+        if check_dir_path_result(res, must_succeed) {
+            let mode = fs::metadata(tmp.path().join("dest"))
+                .unwrap()
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o777, 0o751);
         }
     }
 }

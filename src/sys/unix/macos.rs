@@ -53,3 +53,30 @@ pub fn reflink_file_to_path(from: &File, to: &Path) -> io::Result<()> {
         Ok(())
     }
 }
+
+/// Clone `from` into a new file `name` inside the directory `dir`.
+///
+/// `name` should be a single path component.
+#[cfg(feature = "cap-std")]
+pub(crate) fn reflink_file_to_dir_entry(
+    from: &File,
+    dir: std::os::unix::io::BorrowedFd<'_>,
+    name: &std::ffi::OsStr,
+) -> io::Result<()> {
+    let dest = CString::new(name.as_bytes())?;
+
+    let ret = unsafe {
+        fclonefileat(
+            from.as_raw_fd(),
+            dir.as_raw_fd(),
+            dest.as_ptr(),
+            CLONE_NOOWNERCOPY,
+        )
+    };
+
+    if ret == -1 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}

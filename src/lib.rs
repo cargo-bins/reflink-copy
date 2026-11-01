@@ -14,6 +14,8 @@
 //!
 //! As soon as other OSes support the functionality, support will be added.
 
+#[cfg(all(feature = "cap-std", any(unix, windows)))]
+mod dir_path;
 mod reflink_block;
 mod reflink_op;
 mod sys;
@@ -193,3 +195,6 @@ pub enum ReflinkSupport {
 
 pub use reflink_block::ReflinkBlockBuilder;
 pub use reflink_op::ReflinkOp;
+
+#[cfg(all(feature = "cap-std", any(unix, windows)))]
+pub use dir_path::DirPath;

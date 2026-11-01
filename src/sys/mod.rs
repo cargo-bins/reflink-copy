@@ -10,6 +10,8 @@ cfg_if! {
         mod unix;
         pub use self::unix::{reflink, reflink_file, reflink_file_to_path};
         pub(crate) use self::unix::reflink_block;
+        #[cfg(all(feature = "cap-std", any(target_os = "macos", target_os = "ios", target_os = "tvos", target_os = "watchos")))]
+        pub(crate) use self::unix::reflink_file_to_dir_entry;
     } else if #[cfg(windows)] {
         mod windows_impl;
         pub use self::windows_impl::{reflink, reflink_file, reflink_file_to_path};

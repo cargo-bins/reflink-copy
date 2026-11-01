@@ -9,6 +9,8 @@ cfg_if! {
     } else if #[cfg(any(target_os = "macos", target_os = "ios", target_os = "tvos", target_os = "watchos"))] {
         mod macos;
         pub use macos::{reflink, reflink_file_to_path};
+        #[cfg(feature = "cap-std")]
+        pub(crate) use macos::reflink_file_to_dir_entry;
         pub use super::reflink_file_not_supported as reflink_file;
         pub(crate) use super::reflink_block_not_supported as reflink_block;
     } else {

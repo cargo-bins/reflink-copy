@@ -83,28 +83,26 @@ jobs:
     - name: Setup Dev-Drive ReFS1
       uses: samypr100/setup-dev-drive@v4
       with:
-        drive-size: 1GB
+        # Formatting a 1GB ReFS volume fails with
+        # `Format-Volume: The operation failed with return code 40000`
+        # on windows-latest, use the action's default size instead.
+        drive-size: 2GB
         drive-format: ReFS
         drive-type: Fixed
         drive-path: "${{ runner.temp }}/refs1.vhdx"
         mount-path: "${{ runner.temp }}/refs1"
-        # Formatting a 1GB native Dev Drive fails with
-        # `Format-Volume: The operation failed with return code 40000`
-        # on windows-latest, a plain ReFS volume is enough for block cloning.
-        native-dev-drive: false
 
     - name: Setup Dev-Drive ReFS2
       uses: samypr100/setup-dev-drive@v4
       with:
-        drive-size: 1GB
+        # Formatting a 1GB ReFS volume fails with
+        # `Format-Volume: The operation failed with return code 40000`
+        # on windows-latest, use the action's default size instead.
+        drive-size: 2GB
         drive-format: ReFS
         drive-type: Dynamic
         drive-path: "${{ runner.temp }}/refs2.vhdx"
         mount-path: "${{ runner.temp }}/refs2"
-        # Formatting a 1GB native Dev Drive fails with
-        # `Format-Volume: The operation failed with return code 40000`
-        # on windows-latest, a plain ReFS volume is enough for block cloning.
-        native-dev-drive: false
 
     - name: Setup Dev-Drive NTFS
       uses: samypr100/setup-dev-drive@v4

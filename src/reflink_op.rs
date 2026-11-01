@@ -1,23 +1,25 @@
 use std::fs::File;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::sys;
 
 /// Reflink `self` into `other`.
 ///
 /// This trait unifies the path based API ([`reflink`](crate::reflink)) and the
-/// file based API, which operates on already opened files and thus can be used
-/// with sandboxed file systems APIs like [`cap-std`](https://docs.rs/cap-std)
-/// (enable the `cap-std` feature).
+/// file based API, which operates on already opened files.
 ///
-/// # Path implementations
+/// # Implementations
 ///
-/// Same as [`reflink`](crate::reflink): `other` is created with
-/// `OpenOptions::create_new`, so it must not exist, and the permissions of
-/// `self` are copied to it.
+/// - `Path` to `Path`: same as [`reflink`](crate::reflink). Thanks to
+///   auto-deref, it also works for `PathBuf`.
+/// - `File` to `Path`: like [`reflink`](crate::reflink), `other` is created
+///   with `OpenOptions::create_new` and gets the permissions of `self`.
+///   Since `File` has several implementations, pass `&Path`, e.g.
+///   `file.reflink(path_buf.as_path())`.
+/// - `File` to `File`: see below.
 ///
-/// # File implementations
+/// # `File` to `File`
 ///
 /// The whole content of `self` is cloned into `other`, replacing its content;
 /// `other` must be opened for writing.
@@ -45,25 +47,13 @@ pub trait ReflinkOp<Other: ?Sized = Self> {
     fn reflink(&self, other: &Other) -> io::Result<()>;
 }
 
-macro_rules! impl_path {
-    ($($from:ty => $to:ty),* $(,)?) => {
-        $(
-            impl ReflinkOp<$to> for $from {
-                #[inline]
-                fn reflink(&self, other: &$to) -> io::Result<()> {
-                    crate::reflink(self, other)
-                }
-            }
-        )*
-    };
+impl ReflinkOp for Path {
+    /// Same as [`reflink`](crate::reflink).
+    #[inline]
+    fn reflink(&self, other: &Path) -> io::Result<()> {
+        crate::reflink(self, other)
+    }
 }
-
-impl_path!(
-    Path => Path,
-    Path => PathBuf,
-    PathBuf => PathBuf,
-    PathBuf => Path,
-);
 
 impl ReflinkOp for File {
     #[cfg_attr(
@@ -75,29 +65,19 @@ impl ReflinkOp for File {
     }
 }
 
-#[cfg(all(feature = "cap-std", any(unix, windows)))]
-mod cap_std_impl {
-    use super::*;
-    use crate::file_ref::FileRef;
-
-    impl ReflinkOp for cap_std::fs::File {
-        #[inline]
-        fn reflink(&self, other: &cap_std::fs::File) -> io::Result<()> {
-            FileRef::from_owner(self).reflink(&*FileRef::from_owner(other))
-        }
-    }
-
-    impl ReflinkOp<File> for cap_std::fs::File {
-        #[inline]
-        fn reflink(&self, other: &File) -> io::Result<()> {
-            FileRef::from_owner(self).reflink(other)
-        }
-    }
-
-    impl ReflinkOp<cap_std::fs::File> for File {
-        #[inline]
-        fn reflink(&self, other: &cap_std::fs::File) -> io::Result<()> {
-            self.reflink(&*FileRef::from_owner(other))
-        }
+impl ReflinkOp<Path> for File {
+    /// Reflink `self` into a new file at `other`.
+    ///
+    /// Same as [`reflink`](crate::reflink) except that the source is an
+    /// opened file: `other` is created with `OpenOptions::create_new`, and
+    /// the permissions of `self` are copied to it.
+    ///
+    /// Supported on Linux, Android, Windows and macOS (`fclonefileat`).
+    #[cfg_attr(
+        feature = "tracing",
+        tracing_attributes::instrument(name = "reflink_file_to_path")
+    )]
+    fn reflink(&self, other: &Path) -> io::Result<()> {
+        sys::reflink_file_to_path(self, other)
     }
 }

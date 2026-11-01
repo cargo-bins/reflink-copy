@@ -8,7 +8,11 @@ use std::{
     fs::File,
     io,
     mem::{self, MaybeUninit},
-    os::windows::{ffi::OsStrExt, fs::MetadataExt, io::AsRawHandle},
+    os::windows::{
+        ffi::OsStrExt,
+        fs::MetadataExt,
+        io::{AsRawHandle, BorrowedHandle},
+    },
     path::Path,
 };
 
@@ -32,12 +36,14 @@ use windows::Win32::{
 };
 
 pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
-    // Inspired by https://github.com/0xbadfca11/reflink/blob/master/reflink.cpp
-    let src = File::open(from)?;
-    let permissions = src.metadata()?.permissions();
+    reflink_file_to_path(&File::open(from)?, to)
+}
+
+pub fn reflink_file_to_path(from: &File, to: &Path) -> io::Result<()> {
+    let permissions = from.metadata()?.permissions();
 
     let dest = AutoRemovedFile::create_new(to)?;
-    reflink_file(&src, dest.as_inner_file())?;
+    reflink_file(from, dest.as_inner_file())?;
 
     dest.persist(permissions)
 }
@@ -47,6 +53,7 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
 /// `dest` must be opened for writing, and is truncated / extended to the
 /// length of `src`.
 pub fn reflink_file(src: &File, dest: &File) -> io::Result<()> {
+    // Inspired by https://github.com/0xbadfca11/reflink/blob/master/reflink.cpp
     let src_metadata = src.metadata()?;
     let src_file_size = src_metadata.file_size();
     let src_is_sparse =
@@ -106,7 +113,14 @@ pub fn reflink_file(src: &File, dest: &File) -> io::Result<()> {
     } else {
         None
     };
-    reflink_block(src, 0, dest, 0, total_copy_len as u64, cluster_size)?;
+    reflink_block(
+        std::os::windows::io::AsHandle::as_handle(src),
+        0,
+        std::os::windows::io::AsHandle::as_handle(dest),
+        0,
+        total_copy_len as u64,
+        cluster_size,
+    )?;
     if !src_is_sparse {
         dest.unset_sparse()?;
     }
@@ -357,9 +371,9 @@ fn get_volume_flags(volume_path_w: &[u16]) -> io::Result<u32> {
 }
 
 pub(crate) fn reflink_block(
-    from: &File,
+    from: BorrowedHandle<'_>,
     from_offset: u64,
-    to: &File,
+    to: BorrowedHandle<'_>,
     to_offset: u64,
     src_length: u64,
     cluster_size: Option<NonZeroU64>,
@@ -396,14 +410,14 @@ pub(crate) fn reflink_block(
 }
 
 fn duplicate_extent_to_file(
-    from: &File,
+    from: BorrowedHandle<'_>,
     from_offset: u64,
-    to: &File,
+    to: BorrowedHandle<'_>,
     to_offset: u64,
     src_length: u64,
 ) -> io::Result<()> {
     let mut dup_extent = DUPLICATE_EXTENTS_DATA {
-        FileHandle: from.as_handle(),
+        FileHandle: HANDLE(from.as_raw_handle()),
         SourceFileOffset: from_offset as i64,
         TargetFileOffset: to_offset as i64,
         ByteCount: src_length as i64,
@@ -412,7 +426,7 @@ fn duplicate_extent_to_file(
     let mut bytes_returned = 0u32;
     unsafe {
         DeviceIoControl(
-            to.as_handle(),
+            HANDLE(to.as_raw_handle()),
             FSCTL_DUPLICATE_EXTENTS_TO_FILE,
             Some(&mut dup_extent as *mut _ as *mut c_void),
             size_of::<DUPLICATE_EXTENTS_DATA>().try_into().unwrap(),

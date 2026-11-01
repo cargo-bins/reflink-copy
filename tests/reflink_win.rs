@@ -160,6 +160,20 @@ fn test_reflink_file_on_supported_config() -> std::io::Result<()> {
 
 #[test]
 #[ignore]
+fn test_reflink_file_to_path_on_supported_config() -> std::io::Result<()> {
+    let from = make_subfolder(&refs1_dir(), line!())?.join(FILENAME);
+    let to = make_subfolder(&refs1_dir(), line!())?.join(FILENAME);
+    create_test_file(&from)?;
+
+    let src = File::open(&from)?;
+    src.reflink(to.as_path())?;
+    drop(src);
+
+    compare_files_eq(&from, &to)
+}
+
+#[test]
+#[ignore]
 fn test_reflink_file_on_unsupported_config() -> std::io::Result<()> {
     let from = make_subfolder(&refs1_dir(), line!())?.join(FILENAME);
     let to = make_subfolder(&refs2_dir(), line!())?.join(FILENAME);

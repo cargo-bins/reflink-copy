@@ -1,4 +1,4 @@
-use crate::{file_ref::FileRef, sys};
+use crate::sys::{self, borrow_file, BorrowedFile};
 use std::fs::File;
 use std::io;
 use std::num::NonZeroU64;
@@ -89,9 +89,9 @@ use std::num::NonZeroU64;
 /// [`reflink_or_copy`]: crate::reflink_or_copy
 #[derive(Debug)]
 pub struct ReflinkBlockBuilder<'from, 'to> {
-    from: FileRef<'from>,
+    from: BorrowedFile<'from>,
     from_offset: u64,
-    to: FileRef<'to>,
+    to: BorrowedFile<'to>,
     to_offset: u64,
     src_length: u64,
     cluster_size: Option<NonZeroU64>,
@@ -100,7 +100,7 @@ pub struct ReflinkBlockBuilder<'from, 'to> {
 impl<'from, 'to> ReflinkBlockBuilder<'from, 'to> {
     /// Creates a new instance of [`ReflinkBlockBuilder`].
     pub fn new(from: &'from File, to: &'to File, src_length: NonZeroU64) -> Self {
-        Self::from_file_refs(FileRef::new(from), FileRef::new(to), src_length)
+        Self::from_borrowed(borrow_file(from), borrow_file(to), src_length)
     }
 
     /// Creates a new instance of [`ReflinkBlockBuilder`] from [`cap_std::fs::File`]s.
@@ -112,14 +112,14 @@ impl<'from, 'to> ReflinkBlockBuilder<'from, 'to> {
         to: &'to cap_std::fs::File,
         src_length: NonZeroU64,
     ) -> Self {
-        Self::from_file_refs(
-            FileRef::from_owner(from),
-            FileRef::from_owner(to),
-            src_length,
-        )
+        Self::from_borrowed(borrow_file(from), borrow_file(to), src_length)
     }
 
-    fn from_file_refs(from: FileRef<'from>, to: FileRef<'to>, src_length: NonZeroU64) -> Self {
+    fn from_borrowed(
+        from: BorrowedFile<'from>,
+        to: BorrowedFile<'to>,
+        src_length: NonZeroU64,
+    ) -> Self {
         Self {
             from,
             from_offset: 0,
@@ -155,9 +155,9 @@ impl<'from, 'to> ReflinkBlockBuilder<'from, 'to> {
     /// Performs reflink operation for the specified block of data.
     pub fn reflink_block(self) -> io::Result<()> {
         sys::reflink_block(
-            &self.from,
+            self.from,
             self.from_offset,
-            &self.to,
+            self.to,
             self.to_offset,
             self.src_length,
             self.cluster_size,

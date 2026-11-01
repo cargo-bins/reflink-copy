@@ -5,12 +5,15 @@ use std::{fs, io, path::Path};
 use crate::sys::utility::AutoRemovedFile;
 
 pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
-    let src = fs::File::open(from)?;
-    let permissions = src.metadata()?.permissions();
+    reflink_file_to_path(&fs::File::open(from)?, to)
+}
+
+pub fn reflink_file_to_path(from: &fs::File, to: &Path) -> io::Result<()> {
+    let permissions = from.metadata()?.permissions();
 
     // pass O_EXCL to mimic macos behaviour
     let dest = AutoRemovedFile::create_new(to)?;
-    rustix::fs::ioctl_ficlone(&dest, &src)?;
+    rustix::fs::ioctl_ficlone(&dest, from)?;
 
     dest.persist(permissions)
 }
@@ -30,9 +33,9 @@ pub fn reflink_file(from: &fs::File, to: &fs::File) -> io::Result<()> {
 
 #[cfg(target_os = "linux")]
 pub(crate) fn reflink_block(
-    from: &fs::File,
+    from: crate::sys::BorrowedFile<'_>,
     from_offset: u64,
-    to: &fs::File,
+    to: crate::sys::BorrowedFile<'_>,
     to_offset: u64,
     src_length: u64,
     _cluster_size: Option<std::num::NonZeroU64>,

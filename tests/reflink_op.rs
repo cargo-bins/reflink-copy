@@ -179,7 +179,77 @@ fn path_impls() {
     assert_eq!(fs::read(&existing).unwrap(), b"hello");
 }
 
-#[cfg(all(feature = "cap-std", any(unix, windows)))]
+const FILE_TO_PATH_SUPPORTED: bool = FILE_OP_SUPPORTED
+    || cfg!(any(
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "tvos",
+        target_os = "watchos"
+    ));
+
+#[test]
+fn file_to_path() {
+    let (dir, must_succeed) = test_dir();
+    let src_path = dir.path().join("src");
+    fs::write(&src_path, data()).unwrap();
+    let src = File::open(&src_path).unwrap();
+
+    let dest = dir.path().join("dest");
+    match src.reflink(dest.as_path()) {
+        Ok(()) if FILE_TO_PATH_SUPPORTED => assert_eq!(fs::read(&dest).unwrap(), data()),
+        Ok(()) => panic!("file to path reflink should be unsupported on this platform"),
+        Err(err) if !FILE_TO_PATH_SUPPORTED => {
+            assert_eq!(err.kind(), io::ErrorKind::Unsupported, "{:?}", err);
+        }
+        Err(err) => {
+            assert!(!must_succeed, "reflink failed: {:?}", err);
+            println!("reflink failed (tolerated): {:?}", err);
+            // The dest file is removed on failure.
+            assert!(!dest.exists());
+        }
+    }
+}
+
+#[test]
+fn file_to_existing_path() {
+    let (dir, _) = test_dir();
+    let src_path = dir.path().join("src");
+    fs::write(&src_path, data()).unwrap();
+    let src = File::open(&src_path).unwrap();
+
+    let existing = dir.path().join("existing");
+    fs::write(&existing, b"hello").unwrap();
+    let err = src.reflink(existing.as_path()).unwrap_err();
+    if FILE_TO_PATH_SUPPORTED {
+        assert_eq!(err.kind(), io::ErrorKind::AlreadyExists, "{:?}", err);
+    }
+    assert_eq!(fs::read(&existing).unwrap(), b"hello");
+}
+
+#[cfg(unix)]
+#[test]
+fn file_to_path_copies_permissions() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let (dir, must_succeed) = test_dir();
+    let src_path = dir.path().join("src");
+    fs::write(&src_path, data()).unwrap();
+    fs::set_permissions(&src_path, fs::Permissions::from_mode(0o751)).unwrap();
+    let src = File::open(&src_path).unwrap();
+
+    let dest = dir.path().join("dest");
+    match src.reflink(dest.as_path()) {
+        Ok(()) => {
+            let mode = fs::metadata(&dest).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o751);
+        }
+        Err(err) => {
+            assert!(!(must_succeed && FILE_TO_PATH_SUPPORTED), "{:?}", err);
+        }
+    }
+}
+
+#[cfg(all(feature = "cap-std", target_os = "linux"))]
 mod cap_std_tests {
     use super::*;
     use cap_std::{ambient_authority, fs::Dir};
@@ -210,63 +280,6 @@ mod cap_std_tests {
         buf
     }
 
-    #[test]
-    fn cap_std_to_cap_std() {
-        let (tmp, must_succeed) = test_dir();
-        let dir = open_dir(&tmp);
-
-        let src = dir.open("src").unwrap();
-        let dest = create_dest(&dir, "dest");
-        if check_file_result(src.reflink(&dest), must_succeed) {
-            assert_eq!(read_all_cap(&dest), data());
-        }
-    }
-
-    #[test]
-    fn cap_std_to_std() {
-        let (tmp, must_succeed) = test_dir();
-        let dir = open_dir(&tmp);
-
-        let src = dir.open("src").unwrap();
-        let dest = File::options()
-            .read(true)
-            .write(true)
-            .create_new(true)
-            .open(tmp.path().join("dest"))
-            .unwrap();
-        if check_file_result(src.reflink(&dest), must_succeed) {
-            assert_eq!(read_all(&dest), data());
-        }
-    }
-
-    #[test]
-    fn std_to_cap_std() {
-        let (tmp, must_succeed) = test_dir();
-        let dir = open_dir(&tmp);
-
-        let src = File::open(tmp.path().join("src")).unwrap();
-        let dest = create_dest(&dir, "dest");
-        if check_file_result(src.reflink(&dest), must_succeed) {
-            assert_eq!(read_all_cap(&dest), data());
-        }
-    }
-
-    #[test]
-    fn cap_std_files_still_usable_after_reflink() {
-        let (tmp, _) = test_dir();
-        let dir = open_dir(&tmp);
-
-        let src = dir.open("src").unwrap();
-        let dest = create_dest(&dir, "dest");
-        let _ = src.reflink(&dest);
-        let _ = src.reflink(&dest);
-
-        // Neither file was closed by the borrowed views.
-        assert_eq!(read_all_cap(&src), data());
-        dest.metadata().unwrap();
-    }
-
-    #[cfg(target_os = "linux")]
     #[test]
     fn reflink_block_cap_std_whole_file() {
         use reflink_copy::ReflinkBlockBuilder;

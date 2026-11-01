@@ -14,7 +14,6 @@
 //!
 //! As soon as other OSes support the functionality, support will be added.
 
-mod file_ref;
 mod reflink_block;
 mod reflink_op;
 mod sys;

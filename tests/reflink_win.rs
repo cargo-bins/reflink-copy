@@ -237,12 +237,17 @@ fn test_reflink_block_6gb() -> std::io::Result<()> {
     let to = make_subfolder(&refs2_dir(), line!())?.join(FILENAME);
 
     let mut source_file = File::create_new(&from)?;
+    // The ReFS volume is much smaller than 6GB: on windows-latest, extending
+    // a non-sparse file this much fails with "not enough space on the disk".
+    set_sparse(&source_file)?;
     source_file.set_len(data_size as u64)?;
     // to make test faster, we don't write anything to the file
     source_file.flush()?;
     assert_eq!(source_file.metadata()?.len(), data_size as u64);
 
     let mut dest_file = File::create_new(&to)?;
+    // A sparse source requires a sparse destination.
+    set_sparse(&dest_file)?;
 
     dest_file.set_len(data_size as u64)?;
     ReflinkBlockBuilder::new(
@@ -257,6 +262,29 @@ fn test_reflink_block_6gb() -> std::io::Result<()> {
     drop(dest_file);
 
     compare_files_eq(&from, &to)?;
+    Ok(())
+}
+
+fn set_sparse(file: &File) -> std::io::Result<()> {
+    use std::os::windows::io::AsRawHandle;
+    use windows::Win32::{
+        Foundation::HANDLE,
+        System::{Ioctl::FSCTL_SET_SPARSE, IO::DeviceIoControl},
+    };
+
+    let mut bytes_returned = 0u32;
+    unsafe {
+        DeviceIoControl(
+            HANDLE(file.as_raw_handle()),
+            FSCTL_SET_SPARSE,
+            None,
+            0,
+            None,
+            0,
+            Some(&mut bytes_returned as *mut _),
+            None,
+        )
+    }?;
     Ok(())
 }
 

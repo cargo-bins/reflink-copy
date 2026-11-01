@@ -8,7 +8,11 @@ use std::{
     fs::File,
     io,
     mem::{self, MaybeUninit},
-    os::windows::{ffi::OsStrExt, fs::MetadataExt, io::AsRawHandle},
+    os::windows::{
+        ffi::OsStrExt,
+        fs::MetadataExt,
+        io::{AsHandle, AsRawHandle, BorrowedHandle},
+    },
     path::Path,
 };
 
@@ -32,16 +36,35 @@ use windows::Win32::{
 };
 
 pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
-    // Inspired by https://github.com/0xbadfca11/reflink/blob/master/reflink.cpp
-    let src = File::open(from)?;
+    reflink_file_to_path(&File::open(from)?, to)
+}
 
+pub fn reflink_file_to_path(from: &File, to: &Path) -> io::Result<()> {
+    let dest = AutoRemovedFile::create_new(to)?;
+    reflink_file(from, dest.as_inner_file())?;
+
+    dest.persist_with_same_permission_as(from)
+}
+
+#[cfg(feature = "cap-std")]
+pub fn reflink_file_to_dir(from: &File, dir: &cap_std::fs::Dir, to: &Path) -> io::Result<()> {
+    let dest = AutoRemovedFile::create_new_in(dir, to)?;
+    reflink_file(from, dest.as_inner_file())?;
+
+    dest.persist_with_same_permission_as(from)
+}
+
+/// Reflink the whole content of `src` into `dest`.
+///
+/// `dest` must be opened for writing, and is truncated / extended to the
+/// length of `src`.
+pub fn reflink_file(src: &File, dest: &File) -> io::Result<()> {
+    // Inspired by https://github.com/0xbadfca11/reflink/blob/master/reflink.cpp
     let src_metadata = src.metadata()?;
     let src_file_size = src_metadata.file_size();
     let src_is_sparse =
         (FILE_FLAGS_AND_ATTRIBUTES(src_metadata.file_attributes()) & FILE_ATTRIBUTE_SPARSE_FILE).0
             != 0;
-
-    let dest = AutoRemovedFile::create_new(to)?;
 
     // Set the destination to be sparse while we clone.
     // Important to avoid allocating zero-backed real storage when cloning
@@ -79,7 +102,7 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
     // Later on, we round up the bytes to copy in order to end at a cluster boundary.
     // This might very well result in us cloning past the file end.
     // Let's hope windows api sanitizes this, because otherwise a clean implementation is not really possible.
-    dest.as_inner_file().set_len(src_file_size)?;
+    dest.set_len(src_file_size)?;
 
     // We must end at a cluster boundary
     let total_copy_len: i64 = {
@@ -97,9 +120,9 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
         None
     };
     reflink_block(
-        &src,
+        src.as_handle(),
         0,
-        dest.as_inner_file(),
+        dest.as_handle(),
         0,
         total_copy_len as u64,
         cluster_size,
@@ -108,7 +131,7 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
         dest.unset_sparse()?;
     }
 
-    dest.persist(src_metadata.permissions())
+    Ok(())
 }
 
 /// Additional functionality for windows files, needed for reflink
@@ -122,7 +145,7 @@ trait FileExt {
     ) -> io::Result<()>;
     fn is_block_cloning_supported(&self) -> io::Result<bool>;
 
-    fn as_handle(&self) -> HANDLE;
+    fn as_win32_handle(&self) -> HANDLE;
 }
 
 impl FileExt for File {
@@ -130,7 +153,7 @@ impl FileExt for File {
         let mut bytes_returned = 0u32;
         unsafe {
             DeviceIoControl(
-                self.as_handle(),
+                self.as_win32_handle(),
                 FSCTL_SET_SPARSE,
                 None,
                 0,
@@ -150,7 +173,7 @@ impl FileExt for File {
 
         unsafe {
             DeviceIoControl(
-                self.as_handle(),
+                self.as_win32_handle(),
                 FSCTL_SET_SPARSE,
                 Some(&mut sparse_flag as *mut _ as *mut c_void),
                 mem::size_of::<u32>() as u32,
@@ -171,7 +194,7 @@ impl FileExt for File {
 
         unsafe {
             DeviceIoControl(
-                self.as_handle(),
+                self.as_win32_handle(),
                 FSCTL_GET_INTEGRITY_INFORMATION,
                 None,
                 0,
@@ -193,7 +216,7 @@ impl FileExt for File {
     ) -> io::Result<()> {
         unsafe {
             DeviceIoControl(
-                self.as_handle(),
+                self.as_win32_handle(),
                 FSCTL_SET_INTEGRITY_INFORMATION,
                 Some(integrity_info as *mut _ as *mut c_void),
                 mem::size_of::<FSCTL_SET_INTEGRITY_INFORMATION_BUFFER>()
@@ -212,7 +235,7 @@ impl FileExt for File {
         let mut flags = 0u32;
         unsafe {
             GetVolumeInformationByHandleW(
-                self.as_handle(),
+                self.as_win32_handle(),
                 None,
                 None,
                 None,
@@ -223,12 +246,12 @@ impl FileExt for File {
         Ok((flags & FILE_SUPPORTS_BLOCK_REFCOUNTING) != 0)
     }
 
-    fn as_handle(&self) -> HANDLE {
+    fn as_win32_handle(&self) -> HANDLE {
         HANDLE(self.as_raw_handle())
     }
 }
 
-impl FileExt for AutoRemovedFile {
+impl FileExt for AutoRemovedFile<'_> {
     fn set_sparse(&self) -> io::Result<()> {
         self.as_inner_file().set_sparse()
     }
@@ -253,8 +276,8 @@ impl FileExt for AutoRemovedFile {
         self.as_inner_file().is_block_cloning_supported()
     }
 
-    fn as_handle(&self) -> HANDLE {
-        self.as_inner_file().as_handle()
+    fn as_win32_handle(&self) -> HANDLE {
+        self.as_inner_file().as_win32_handle()
     }
 }
 
@@ -354,9 +377,9 @@ fn get_volume_flags(volume_path_w: &[u16]) -> io::Result<u32> {
 }
 
 pub(crate) fn reflink_block(
-    from: &File,
+    from: BorrowedHandle<'_>,
     from_offset: u64,
-    to: &File,
+    to: BorrowedHandle<'_>,
     to_offset: u64,
     src_length: u64,
     cluster_size: Option<NonZeroU64>,
@@ -393,14 +416,14 @@ pub(crate) fn reflink_block(
 }
 
 fn duplicate_extent_to_file(
-    from: &File,
+    from: BorrowedHandle<'_>,
     from_offset: u64,
-    to: &File,
+    to: BorrowedHandle<'_>,
     to_offset: u64,
     src_length: u64,
 ) -> io::Result<()> {
     let mut dup_extent = DUPLICATE_EXTENTS_DATA {
-        FileHandle: from.as_handle(),
+        FileHandle: HANDLE(from.as_raw_handle()),
         SourceFileOffset: from_offset as i64,
         TargetFileOffset: to_offset as i64,
         ByteCount: src_length as i64,
@@ -409,7 +432,7 @@ fn duplicate_extent_to_file(
     let mut bytes_returned = 0u32;
     unsafe {
         DeviceIoControl(
-            to.as_handle(),
+            HANDLE(to.as_raw_handle()),
             FSCTL_DUPLICATE_EXTENTS_TO_FILE,
             Some(&mut dup_extent as *mut _ as *mut c_void),
             size_of::<DUPLICATE_EXTENTS_DATA>().try_into().unwrap(),

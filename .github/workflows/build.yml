@@ -64,13 +64,13 @@ jobs:
 
     - name: Test
       if: "! matrix.use-cross"
-      run: cargo test --target ${{ matrix.target }} -- --show-output
+      run: cargo test --all-features --target ${{ matrix.target }} -- --show-output
       env:
         RUST_BACKTRACE: 1
 
     - name: Test using cross
       if: "matrix.use-cross"
-      run: cross test --target ${{ matrix.target }} -- --show-output
+      run: cross test --all-features --target ${{ matrix.target }} -- --show-output
       env:
         RUST_BACKTRACE: 1
 
@@ -115,9 +115,44 @@ jobs:
 
     - uses: Swatinem/rust-cache@v2
     - name: Test
-      run: cargo test -- --include-ignored --show-output
+      run: cargo test --all-features -- --include-ignored --show-output
       env:
         RUST_BACKTRACE: 1
+        REFLINK_COPY_TEST_DIR: "${{ runner.temp }}/refs1"
+
+  test-linux-reflink-fs:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - fs: btrfs
+            pkg: btrfs-progs
+            mkfs: mkfs.btrfs -q
+          - fs: xfs
+            pkg: xfsprogs
+            mkfs: mkfs.xfs -q -m reflink=1
+
+    runs-on: ubuntu-latest
+    name: test-linux-reflink-fs (${{ matrix.fs }})
+
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Setup ${{ matrix.fs }}
+      run: |
+        sudo apt-get update && sudo apt-get install -y ${{ matrix.pkg }}
+        truncate -s 512M "$RUNNER_TEMP/fs.img"
+        ${{ matrix.mkfs }} "$RUNNER_TEMP/fs.img"
+        sudo mkdir -p /mnt/reflink
+        sudo mount -o loop "$RUNNER_TEMP/fs.img" /mnt/reflink
+        sudo chown "$(id -u):$(id -g)" /mnt/reflink
+
+    - uses: Swatinem/rust-cache@v2
+    - name: Test
+      run: cargo test --all-features -- --show-output
+      env:
+        RUST_BACKTRACE: 1
+        REFLINK_COPY_TEST_DIR: /mnt/reflink
         
   cross-check:
     strategy:

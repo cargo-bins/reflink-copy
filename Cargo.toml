@@ -22,8 +22,11 @@ version = "1.0.1"
 default-features = false
 features = ["fs", "std"]
 
-[target.'cfg(target_os = "linux")'.dependencies.libc]
+[target.'cfg(any(target_os = "linux", target_os = "macos", target_os = "ios", target_os = "tvos", target_os = "watchos"))'.dependencies.libc]
 version = "0.2.169"
+
+[target.'cfg(any(unix, windows))'.dependencies]
+cap-std = { version = "4.0.0", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 # Use a wider range to avoid duplication of the windows crates in downstream crates
@@ -31,8 +34,13 @@ windows = { version = ">=0.61.0,<0.63.0", features = ["Win32_Storage_FileSystem"
 
 [features]
 tracing = ["dep:tracing", "dep:tracing-attributes"]
+# Add `DirPath` and `ReflinkBlockBuilder::new_cap_std`.
+cap-std = ["dep:cap-std"]
 
 [dev-dependencies]
 tempfile = "3.12.0"
 regex = "1.11.1"
 walkdir = "2.5.0"
+
+[package.metadata.docs.rs]
+all-features = true

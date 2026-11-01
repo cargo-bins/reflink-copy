@@ -5,21 +5,44 @@ use std::{fs, io, path::Path};
 use crate::sys::utility::AutoRemovedFile;
 
 pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
-    let src = fs::File::open(from)?;
-    let permissions = src.metadata()?.permissions();
+    reflink_file_to_path(&fs::File::open(from)?, to)
+}
 
+pub fn reflink_file_to_path(from: &fs::File, to: &Path) -> io::Result<()> {
     // pass O_EXCL to mimic macos behaviour
     let dest = AutoRemovedFile::create_new(to)?;
-    rustix::fs::ioctl_ficlone(&dest, &src)?;
+    rustix::fs::ioctl_ficlone(&dest, from)?;
 
-    dest.persist(permissions)
+    dest.persist_with_same_permission_as(from)
+}
+
+#[cfg(feature = "cap-std")]
+pub fn reflink_file_to_dir(from: &fs::File, dir: &cap_std::fs::Dir, to: &Path) -> io::Result<()> {
+    // pass O_EXCL to mimic macos behaviour
+    let dest = AutoRemovedFile::create_new_in(dir, to)?;
+    rustix::fs::ioctl_ficlone(&dest, from)?;
+
+    dest.persist_with_same_permission_as(from)
+}
+
+pub fn reflink_file(from: &fs::File, to: &fs::File) -> io::Result<()> {
+    // FICLONE never shrinks `to`: if `to` is larger than `from`, it either
+    // keeps the old tail of `to` (`from` ends at a block boundary) or fails
+    // with EINVAL (it does not, since a partial block cannot be cloned into
+    // the middle of a file). Truncate it first to replace the content,
+    // consistent with the windows implementation.
+    if to.metadata()?.len() != 0 {
+        to.set_len(0)?;
+    }
+    rustix::fs::ioctl_ficlone(to, from)?;
+    Ok(())
 }
 
 #[cfg(target_os = "linux")]
 pub(crate) fn reflink_block(
-    from: &fs::File,
+    from: crate::sys::BorrowedFile<'_>,
     from_offset: u64,
-    to: &fs::File,
+    to: crate::sys::BorrowedFile<'_>,
     to_offset: u64,
     src_length: u64,
     _cluster_size: Option<std::num::NonZeroU64>,

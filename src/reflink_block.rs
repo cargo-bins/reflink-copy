@@ -1,4 +1,4 @@
-use crate::sys;
+use crate::sys::{self, borrow_file, BorrowedFile};
 use std::fs::File;
 use std::io;
 use std::num::NonZeroU64;
@@ -89,9 +89,9 @@ use std::num::NonZeroU64;
 /// [`reflink_or_copy`]: crate::reflink_or_copy
 #[derive(Debug)]
 pub struct ReflinkBlockBuilder<'from, 'to> {
-    from: &'from File,
+    from: BorrowedFile<'from>,
     from_offset: u64,
-    to: &'to File,
+    to: BorrowedFile<'to>,
     to_offset: u64,
     src_length: u64,
     cluster_size: Option<NonZeroU64>,
@@ -100,6 +100,26 @@ pub struct ReflinkBlockBuilder<'from, 'to> {
 impl<'from, 'to> ReflinkBlockBuilder<'from, 'to> {
     /// Creates a new instance of [`ReflinkBlockBuilder`].
     pub fn new(from: &'from File, to: &'to File, src_length: NonZeroU64) -> Self {
+        Self::from_borrowed(borrow_file(from), borrow_file(to), src_length)
+    }
+
+    /// Creates a new instance of [`ReflinkBlockBuilder`] from [`cap_std::fs::File`]s.
+    ///
+    /// Behaves exactly like [`ReflinkBlockBuilder::new`].
+    #[cfg(all(feature = "cap-std", any(unix, windows)))]
+    pub fn new_cap_std(
+        from: &'from cap_std::fs::File,
+        to: &'to cap_std::fs::File,
+        src_length: NonZeroU64,
+    ) -> Self {
+        Self::from_borrowed(borrow_file(from), borrow_file(to), src_length)
+    }
+
+    fn from_borrowed(
+        from: BorrowedFile<'from>,
+        to: BorrowedFile<'to>,
+        src_length: NonZeroU64,
+    ) -> Self {
         Self {
             from,
             from_offset: 0,

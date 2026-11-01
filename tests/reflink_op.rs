@@ -1,0 +1,279 @@
+//! Tests for [`ReflinkOp`].
+//!
+//! Set `REFLINK_COPY_TEST_DIR` to a directory on a file system supporting
+//! reflink (e.g. btrfs or XFS on Linux) to require the reflink to succeed,
+//! otherwise failing to reflink because of the file system is tolerated.
+
+use std::fs::{self, File};
+use std::io::{self, Read, Seek};
+use std::path::{Path, PathBuf};
+
+use reflink_copy::ReflinkOp;
+use tempfile::TempDir;
+
+const DATA_LEN: usize = 3 * 64 * 1024 + 7;
+
+fn test_dir() -> (TempDir, bool) {
+    match std::env::var_os("REFLINK_COPY_TEST_DIR") {
+        Some(dir) => (tempfile::tempdir_in(dir).unwrap(), true),
+        None => (tempfile::tempdir().unwrap(), false),
+    }
+}
+
+fn data() -> Vec<u8> {
+    (0..DATA_LEN).map(|i| (i % 251) as u8).collect()
+}
+
+const FILE_OP_SUPPORTED: bool = cfg!(any(
+    all(
+        any(target_os = "linux", target_os = "android"),
+        not(any(target_arch = "sparc", target_arch = "sparc64"))
+    ),
+    windows
+));
+
+/// Check the result of a file based reflink, return `true` if the content
+/// should be checked.
+fn check_file_result(res: io::Result<()>, must_succeed: bool) -> bool {
+    match res {
+        Ok(()) if FILE_OP_SUPPORTED => true,
+        Ok(()) => panic!("file based reflink should be unsupported on this platform"),
+        Err(err) if !FILE_OP_SUPPORTED => {
+            assert_eq!(err.kind(), io::ErrorKind::Unsupported, "{:?}", err);
+            false
+        }
+        Err(err) => {
+            assert!(!must_succeed, "reflink failed: {:?}", err);
+            println!("reflink failed (tolerated): {:?}", err);
+            false
+        }
+    }
+}
+
+fn read_all(mut file: &File) -> Vec<u8> {
+    let mut buf = Vec::new();
+    file.rewind().unwrap();
+    file.read_to_end(&mut buf).unwrap();
+    buf
+}
+
+#[test]
+fn file_to_new_file() {
+    let (dir, must_succeed) = test_dir();
+    let src_path = dir.path().join("src");
+    fs::write(&src_path, data()).unwrap();
+
+    let src = File::open(&src_path).unwrap();
+    let dest = File::options()
+        .read(true)
+        .write(true)
+        .create_new(true)
+        .open(dir.path().join("dest"))
+        .unwrap();
+
+    if check_file_result(src.reflink(&dest), must_succeed) {
+        assert_eq!(read_all(&dest), data());
+    }
+}
+
+#[test]
+fn file_to_existing_larger_file() {
+    let (dir, must_succeed) = test_dir();
+    let src_path = dir.path().join("src");
+    fs::write(&src_path, data()).unwrap();
+
+    let dest_path = dir.path().join("dest");
+    fs::write(&dest_path, vec![0xffu8; DATA_LEN * 2]).unwrap();
+
+    let src = File::open(&src_path).unwrap();
+    let dest = File::options()
+        .read(true)
+        .write(true)
+        .open(&dest_path)
+        .unwrap();
+
+    if check_file_result(src.reflink(&dest), must_succeed) {
+        assert_eq!(read_all(&dest), data());
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn file_keeps_dest_permissions() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let (dir, must_succeed) = test_dir();
+    let src_path = dir.path().join("src");
+    fs::write(&src_path, data()).unwrap();
+    fs::set_permissions(&src_path, fs::Permissions::from_mode(0o755)).unwrap();
+
+    let dest_path = dir.path().join("dest");
+    let dest = File::create_new(&dest_path).unwrap();
+    dest.set_permissions(fs::Permissions::from_mode(0o600))
+        .unwrap();
+
+    let src = File::open(&src_path).unwrap();
+    if check_file_result(src.reflink(&dest), must_succeed) {
+        let mode = fs::metadata(&dest_path).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o600);
+    }
+}
+
+#[test]
+fn file_src_not_readable() {
+    let (dir, _) = test_dir();
+    let src_path = dir.path().join("src");
+    fs::write(&src_path, data()).unwrap();
+
+    // Opened write-only, so it cannot be used as reflink source.
+    let src = File::options().write(true).open(&src_path).unwrap();
+    let dest = File::create_new(dir.path().join("dest")).unwrap();
+
+    src.reflink(&dest).unwrap_err();
+}
+
+#[test]
+fn path_impls() {
+    let (dir, must_succeed) = test_dir();
+    let src: PathBuf = dir.path().join("src");
+    fs::write(&src, data()).unwrap();
+
+    let check = |res: io::Result<()>, dest: &Path| match res {
+        Ok(()) => assert_eq!(fs::read(dest).unwrap(), data()),
+        Err(err) => {
+            assert!(!must_succeed, "reflink failed: {:?}", err);
+            println!("reflink failed (tolerated): {:?}", err);
+        }
+    };
+
+    let dest1 = dir.path().join("dest1");
+    check(src.as_path().reflink(dest1.as_path()), &dest1);
+
+    let dest2 = dir.path().join("dest2");
+    check(src.as_path().reflink(&dest2), &dest2);
+
+    let dest3 = dir.path().join("dest3");
+    check(src.reflink(&dest3), &dest3);
+
+    let dest4 = dir.path().join("dest4");
+    check(src.reflink(dest4.as_path()), &dest4);
+
+    // Same as `reflink`: `other` must not exist.
+    let existing = dir.path().join("existing");
+    fs::write(&existing, b"hello").unwrap();
+    let err = src.reflink(&existing).unwrap_err();
+    assert_eq!(err.kind(), io::ErrorKind::AlreadyExists, "{:?}", err);
+    assert_eq!(fs::read(&existing).unwrap(), b"hello");
+}
+
+#[cfg(all(feature = "cap-std", any(unix, windows)))]
+mod cap_std_tests {
+    use super::*;
+    use cap_std::{ambient_authority, fs::Dir};
+
+    fn open_dir(dir: &TempDir) -> Dir {
+        let dir = Dir::open_ambient_dir(dir.path(), ambient_authority()).unwrap();
+        let mut src = dir.create("src").unwrap();
+        std::io::Write::write_all(&mut src, &data()).unwrap();
+        dir
+    }
+
+    fn create_dest(dir: &Dir, name: &str) -> cap_std::fs::File {
+        dir.open_with(
+            name,
+            cap_std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create_new(true),
+        )
+        .unwrap()
+    }
+
+    fn read_all_cap(file: &cap_std::fs::File) -> Vec<u8> {
+        let mut buf = Vec::new();
+        let mut file = file;
+        file.rewind().unwrap();
+        file.read_to_end(&mut buf).unwrap();
+        buf
+    }
+
+    #[test]
+    fn cap_std_to_cap_std() {
+        let (tmp, must_succeed) = test_dir();
+        let dir = open_dir(&tmp);
+
+        let src = dir.open("src").unwrap();
+        let dest = create_dest(&dir, "dest");
+        if check_file_result(src.reflink(&dest), must_succeed) {
+            assert_eq!(read_all_cap(&dest), data());
+        }
+    }
+
+    #[test]
+    fn cap_std_to_std() {
+        let (tmp, must_succeed) = test_dir();
+        let dir = open_dir(&tmp);
+
+        let src = dir.open("src").unwrap();
+        let dest = File::options()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .open(tmp.path().join("dest"))
+            .unwrap();
+        if check_file_result(src.reflink(&dest), must_succeed) {
+            assert_eq!(read_all(&dest), data());
+        }
+    }
+
+    #[test]
+    fn std_to_cap_std() {
+        let (tmp, must_succeed) = test_dir();
+        let dir = open_dir(&tmp);
+
+        let src = File::open(tmp.path().join("src")).unwrap();
+        let dest = create_dest(&dir, "dest");
+        if check_file_result(src.reflink(&dest), must_succeed) {
+            assert_eq!(read_all_cap(&dest), data());
+        }
+    }
+
+    #[test]
+    fn cap_std_files_still_usable_after_reflink() {
+        let (tmp, _) = test_dir();
+        let dir = open_dir(&tmp);
+
+        let src = dir.open("src").unwrap();
+        let dest = create_dest(&dir, "dest");
+        let _ = src.reflink(&dest);
+        let _ = src.reflink(&dest);
+
+        // Neither file was closed by the borrowed views.
+        assert_eq!(read_all_cap(&src), data());
+        dest.metadata().unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn reflink_block_cap_std_whole_file() {
+        use reflink_copy::ReflinkBlockBuilder;
+        use std::num::NonZeroU64;
+
+        let (tmp, must_succeed) = test_dir();
+        let dir = open_dir(&tmp);
+
+        let src = dir.open("src").unwrap();
+        let dest = create_dest(&dir, "dest");
+        dest.set_len(DATA_LEN as u64).unwrap();
+
+        let res = ReflinkBlockBuilder::new_cap_std(
+            &src,
+            &dest,
+            NonZeroU64::new(DATA_LEN as u64).unwrap(),
+        )
+        .reflink_block();
+        if check_file_result(res, must_succeed) {
+            assert_eq!(read_all_cap(&dest), data());
+        }
+    }
+}

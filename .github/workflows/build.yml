@@ -64,13 +64,13 @@ jobs:
 
     - name: Test
       if: "! matrix.use-cross"
-      run: cargo test --target ${{ matrix.target }} -- --show-output
+      run: cargo test --all-features --target ${{ matrix.target }} -- --show-output
       env:
         RUST_BACKTRACE: 1
 
     - name: Test using cross
       if: "matrix.use-cross"
-      run: cross test --target ${{ matrix.target }} -- --show-output
+      run: cross test --all-features --target ${{ matrix.target }} -- --show-output
       env:
         RUST_BACKTRACE: 1
 
@@ -109,9 +109,32 @@ jobs:
 
     - uses: Swatinem/rust-cache@v2
     - name: Test
-      run: cargo test -- --include-ignored --show-output
+      run: cargo test --all-features -- --include-ignored --show-output
       env:
         RUST_BACKTRACE: 1
+        REFLINK_COPY_TEST_DIR: "${{ runner.temp }}/refs1"
+
+  test-linux-btrfs:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Setup btrfs
+      run: |
+        sudo apt-get update && sudo apt-get install -y btrfs-progs
+        truncate -s 512M "$RUNNER_TEMP/btrfs.img"
+        mkfs.btrfs -q "$RUNNER_TEMP/btrfs.img"
+        sudo mkdir -p /mnt/btrfs
+        sudo mount -o loop "$RUNNER_TEMP/btrfs.img" /mnt/btrfs
+        sudo chown "$(id -u):$(id -g)" /mnt/btrfs
+
+    - uses: Swatinem/rust-cache@v2
+    - name: Test
+      run: cargo test --all-features -- --show-output
+      env:
+        RUST_BACKTRACE: 1
+        REFLINK_COPY_TEST_DIR: /mnt/btrfs
         
   cross-check:
     strategy:

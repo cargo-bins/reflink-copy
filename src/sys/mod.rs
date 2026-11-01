@@ -8,21 +8,27 @@ mod utility;
 cfg_if! {
     if #[cfg(unix)] {
         mod unix;
-        pub use self::unix::reflink;
+        pub use self::unix::{reflink, reflink_file};
         pub(crate) use self::unix::reflink_block;
     } else if #[cfg(windows)] {
         mod windows_impl;
-        pub use self::windows_impl::reflink;
+        pub use self::windows_impl::{reflink, reflink_file};
         pub use self::windows_impl::check_reflink_support;
         pub(crate) use self::windows_impl::reflink_block;
     } else {
         pub use self::reflink_not_supported as reflink;
+        pub use self::reflink_file_not_supported as reflink_file;
         pub(crate) use self::reflink_block_not_supported as reflink_block;
     }
 }
 
 #[allow(dead_code)]
 pub fn reflink_not_supported(_from: &Path, _to: &Path) -> std::io::Result<()> {
+    Err(std::io::ErrorKind::Unsupported.into())
+}
+
+#[allow(dead_code)]
+pub fn reflink_file_not_supported(_from: &fs::File, _to: &fs::File) -> std::io::Result<()> {
     Err(std::io::ErrorKind::Unsupported.into())
 }
 

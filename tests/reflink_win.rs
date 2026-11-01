@@ -1,7 +1,7 @@
 #![cfg(windows)]
 
 use reflink_copy::{
-    check_reflink_support, reflink, reflink_or_copy, ReflinkBlockBuilder, ReflinkSupport,
+    check_reflink_support, reflink, reflink_or_copy, ReflinkBlockBuilder, ReflinkOp, ReflinkSupport,
 };
 use std::fs::File;
 use std::io::{Read, Write};
@@ -139,6 +139,35 @@ fn test_reflink_or_copy_on_unsupported_config() -> std::io::Result<()> {
     create_test_file(&from.join(FILENAME))?;
     let result = reflink_or_copy(from.join(FILENAME), to.join(FILENAME))?;
     assert_eq!(result, Some(FILE_SIZE as u64));
+    Ok(())
+}
+
+#[test]
+#[ignore]
+fn test_reflink_file_on_supported_config() -> std::io::Result<()> {
+    let from = make_subfolder(&refs1_dir(), line!())?.join(FILENAME);
+    let to = make_subfolder(&refs1_dir(), line!())?.join(FILENAME);
+    create_test_file(&from)?;
+
+    let src = File::open(&from)?;
+    let dest = File::create_new(&to)?;
+    src.reflink(&dest)?;
+    drop(src);
+    drop(dest);
+
+    compare_files_eq(&from, &to)
+}
+
+#[test]
+#[ignore]
+fn test_reflink_file_on_unsupported_config() -> std::io::Result<()> {
+    let from = make_subfolder(&refs1_dir(), line!())?.join(FILENAME);
+    let to = make_subfolder(&refs2_dir(), line!())?.join(FILENAME);
+    create_test_file(&from)?;
+
+    let src = File::open(&from)?;
+    let dest = File::create_new(&to)?;
+    let _ = src.reflink(&dest).unwrap_err();
     Ok(())
 }
 

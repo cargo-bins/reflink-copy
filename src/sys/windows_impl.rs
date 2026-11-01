@@ -34,14 +34,24 @@ use windows::Win32::{
 pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
     // Inspired by https://github.com/0xbadfca11/reflink/blob/master/reflink.cpp
     let src = File::open(from)?;
+    let permissions = src.metadata()?.permissions();
 
+    let dest = AutoRemovedFile::create_new(to)?;
+    reflink_file(&src, dest.as_inner_file())?;
+
+    dest.persist(permissions)
+}
+
+/// Reflink the whole content of `src` into `dest`.
+///
+/// `dest` must be opened for writing, and is truncated / extended to the
+/// length of `src`.
+pub fn reflink_file(src: &File, dest: &File) -> io::Result<()> {
     let src_metadata = src.metadata()?;
     let src_file_size = src_metadata.file_size();
     let src_is_sparse =
         (FILE_FLAGS_AND_ATTRIBUTES(src_metadata.file_attributes()) & FILE_ATTRIBUTE_SPARSE_FILE).0
             != 0;
-
-    let dest = AutoRemovedFile::create_new(to)?;
 
     // Set the destination to be sparse while we clone.
     // Important to avoid allocating zero-backed real storage when cloning
@@ -79,7 +89,7 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
     // Later on, we round up the bytes to copy in order to end at a cluster boundary.
     // This might very well result in us cloning past the file end.
     // Let's hope windows api sanitizes this, because otherwise a clean implementation is not really possible.
-    dest.as_inner_file().set_len(src_file_size)?;
+    dest.set_len(src_file_size)?;
 
     // We must end at a cluster boundary
     let total_copy_len: i64 = {
@@ -96,19 +106,12 @@ pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
     } else {
         None
     };
-    reflink_block(
-        &src,
-        0,
-        dest.as_inner_file(),
-        0,
-        total_copy_len as u64,
-        cluster_size,
-    )?;
+    reflink_block(src, 0, dest, 0, total_copy_len as u64, cluster_size)?;
     if !src_is_sparse {
         dest.unset_sparse()?;
     }
 
-    dest.persist(src_metadata.permissions())
+    Ok(())
 }
 
 /// Additional functionality for windows files, needed for reflink

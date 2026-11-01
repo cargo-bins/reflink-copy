@@ -31,6 +31,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Other
 
+- release v0.1.31 ([#214](https://github.com/cargo-bins/reflink-copy/pull/214))
+- Add `ReflinkOp` trait with `File` and `cap-std` support ([#232](https://github.com/cargo-bins/reflink-copy/pull/232))
+- Fix test-windows-refs: create 2GB ReFS drives ([#233](https://github.com/cargo-bins/reflink-copy/pull/233))
+- Bump taiki-e/install-action from 2.87.20 to 2.87.29 ([#225](https://github.com/cargo-bins/reflink-copy/pull/225))
+- extract new job test-windows-refs ([#216](https://github.com/cargo-bins/reflink-copy/pull/216))
+- Bump taiki-e/install-action from 2.85.3 to 2.87.20 ([#213](https://github.com/cargo-bins/reflink-copy/pull/213))
+- Bump taiki-e/install-action from 2 to 2.85.3 ([#183](https://github.com/cargo-bins/reflink-copy/pull/183))
+- Bump actions/checkout from 6 to 7 ([#177](https://github.com/cargo-bins/reflink-copy/pull/177))
+
+## [0.1.31](https://github.com/cargo-bins/reflink-copy/compare/v0.1.30...v0.1.31) - 2026-11-01
+
+### Other
+
 - Add `ReflinkOp` trait with `File` and `cap-std` support ([#232](https://github.com/cargo-bins/reflink-copy/pull/232))
 - Fix test-windows-refs: create 2GB ReFS drives ([#233](https://github.com/cargo-bins/reflink-copy/pull/233))
 - Bump taiki-e/install-action from 2.87.20 to 2.87.29 ([#225](https://github.com/cargo-bins/reflink-copy/pull/225))

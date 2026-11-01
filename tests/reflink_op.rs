@@ -179,6 +179,23 @@ fn path_impls() {
     assert_eq!(fs::read(&existing).unwrap(), b"hello");
 }
 
+/// A directory opened as a `File` is reported as an invalid source.
+#[cfg(target_os = "linux")]
+#[test]
+fn file_src_is_dir() {
+    let (dir, _) = test_dir();
+    let src = File::open(dir.path()).unwrap();
+
+    let dest_path = dir.path().join("dest");
+    let err = src.reflink(dest_path.as_path()).unwrap_err();
+    assert_eq!(err.kind(), io::ErrorKind::InvalidInput, "{:?}", err);
+    assert!(!dest_path.exists());
+
+    let dest = File::create_new(&dest_path).unwrap();
+    let err = src.reflink(&dest).unwrap_err();
+    assert_eq!(err.kind(), io::ErrorKind::InvalidInput, "{:?}", err);
+}
+
 const FILE_TO_PATH_SUPPORTED: bool = FILE_OP_SUPPORTED
     || cfg!(any(
         target_os = "macos",

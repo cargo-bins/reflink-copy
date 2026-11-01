@@ -75,26 +75,27 @@ impl AsFd for AutoRemovedFile<'_> {
 
 impl Drop for AutoRemovedFile<'_> {
     fn drop(&mut self) {
-        if let Some(file) = self.inner.take() {
-            // Close it first, an opened file may not be removable on windows.
-            drop(file);
+        let Some(file) = self.inner.take() else {
+            return;
+        };
+        // Close it first, an opened file may not be removable on windows.
+        drop(file);
 
-            #[cfg(all(feature = "cap-std", any(unix, windows)))]
-            let res = match self.dir {
-                Some(dir) => dir.remove_file(self.path),
-                None => remove_file(self.path),
-            };
-            #[cfg(not(all(feature = "cap-std", any(unix, windows))))]
-            let res = remove_file(self.path);
+        #[cfg(all(feature = "cap-std", any(unix, windows)))]
+        let res = match self.dir {
+            Some(dir) => dir.remove_file(self.path),
+            None => remove_file(self.path),
+        };
+        #[cfg(not(all(feature = "cap-std", any(unix, windows))))]
+        let res = remove_file(self.path);
 
-            if let Err(_err) = res {
-                #[cfg(feature = "tracing")]
-                tracing::warn!(
-                    ?_err,
-                    "Failed to remove dest file {} on cleanup (failed to reflink)",
-                    self.path.display(),
-                );
-            }
+        if let Err(_err) = res {
+            #[cfg(feature = "tracing")]
+            tracing::warn!(
+                ?_err,
+                "Failed to remove dest file {} on cleanup (failed to reflink)",
+                self.path.display(),
+            );
         }
     }
 }

@@ -63,30 +63,41 @@ pub fn reflink(from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Result<()> {
     #[cfg_attr(feature = "tracing", tracing_attributes::instrument(name = "reflink"))]
     fn inner(from: &Path, to: &Path) -> io::Result<()> {
         sys::reflink(from, to).map_err(|err| {
-            // Linux and Windows will return an inscrutable error when `from` is a directory or a
-            // symlink, so add the real problem to the error. We need to use `fs::symlink_metadata`
-            // here because `from.is_file()` traverses symlinks.
-            //
-            // According to https://www.manpagez.com/man/2/clonefile/, Macos otoh can reflink files,
-            // directories and symlinks, so the original error is fine.
-            if !cfg!(any(
-                target_os = "macos",
-                target_os = "ios",
-                target_os = "tvos",
-                target_os = "watchos"
-            )) && !fs::symlink_metadata(from).map_or(false, |m| m.is_file())
-            {
-                io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    format!("the source path is not an existing regular file: {}", err),
-                )
-            } else {
-                err
-            }
+            // We need to use `fs::symlink_metadata` here because `from.is_file()` traverses
+            // symlinks.
+            add_not_regular_file_context(err, || {
+                fs::symlink_metadata(from).is_ok_and(|m| m.is_file())
+            })
         })
     }
 
     inner(from.as_ref(), to.as_ref())
+}
+
+/// Linux and Windows return an inscrutable error when the source is a directory or a symlink, so
+/// add the real problem to `err` if `is_file` returns `false`.
+///
+/// According to <https://www.manpagez.com/man/2/clonefile/>, macOS otoh can reflink files,
+/// directories and symlinks, so the original error is fine there.
+fn add_not_regular_file_context(err: io::Error, is_file: impl FnOnce() -> bool) -> io::Error {
+    if !cfg!(any(
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "tvos",
+        target_os = "watchos"
+    )) && !is_file()
+    {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("the source is not an existing regular file: {}", err),
+        )
+    } else {
+        err
+    }
+}
+
+fn is_file(file: &fs::File) -> bool {
+    file.metadata().is_ok_and(|m| m.is_file())
 }
 
 /// Reflinks the whole content of the opened file `from` into the opened file `to`.
@@ -124,7 +135,7 @@ pub fn reflink(from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Result<()> {
     tracing_attributes::instrument(name = "reflink_file")
 )]
 pub fn reflink_file(from: &fs::File, to: &fs::File) -> io::Result<()> {
-    sys::reflink_file(from, to)
+    sys::reflink_file(from, to).map_err(|err| add_not_regular_file_context(err, || is_file(from)))
 }
 
 /// Reflinks the opened file `from` into a new file at `to`.
@@ -144,6 +155,7 @@ pub fn reflink_file_to_path(from: &fs::File, to: impl AsRef<Path>) -> io::Result
     )]
     fn inner(from: &fs::File, to: &Path) -> io::Result<()> {
         sys::reflink_file_to_path(from, to)
+            .map_err(|err| add_not_regular_file_context(err, || is_file(from)))
     }
 
     inner(from, to.as_ref())
@@ -183,6 +195,7 @@ pub fn reflink_file_to_dir(
     )]
     fn inner(from: &fs::File, dir: &cap_std::fs::Dir, to: &Path) -> io::Result<()> {
         sys::reflink_file_to_dir(from, dir, to)
+            .map_err(|err| add_not_regular_file_context(err, || is_file(from)))
     }
 
     inner(from, dir, to.as_ref())

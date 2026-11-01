@@ -11,7 +11,7 @@ use std::{
     os::windows::{
         ffi::OsStrExt,
         fs::MetadataExt,
-        io::{AsRawHandle, BorrowedHandle},
+        io::{AsHandle, AsRawHandle, BorrowedHandle},
     },
     path::Path,
 };
@@ -124,9 +124,9 @@ pub fn reflink_file(src: &File, dest: &File) -> io::Result<()> {
         None
     };
     reflink_block(
-        std::os::windows::io::AsHandle::as_handle(src),
+        src.as_handle(),
         0,
-        std::os::windows::io::AsHandle::as_handle(dest),
+        dest.as_handle(),
         0,
         total_copy_len as u64,
         cluster_size,
@@ -149,7 +149,7 @@ trait FileExt {
     ) -> io::Result<()>;
     fn is_block_cloning_supported(&self) -> io::Result<bool>;
 
-    fn as_handle(&self) -> HANDLE;
+    fn as_win32_handle(&self) -> HANDLE;
 }
 
 impl FileExt for File {
@@ -157,7 +157,7 @@ impl FileExt for File {
         let mut bytes_returned = 0u32;
         unsafe {
             DeviceIoControl(
-                self.as_handle(),
+                self.as_win32_handle(),
                 FSCTL_SET_SPARSE,
                 None,
                 0,
@@ -177,7 +177,7 @@ impl FileExt for File {
 
         unsafe {
             DeviceIoControl(
-                self.as_handle(),
+                self.as_win32_handle(),
                 FSCTL_SET_SPARSE,
                 Some(&mut sparse_flag as *mut _ as *mut c_void),
                 mem::size_of::<u32>() as u32,
@@ -198,7 +198,7 @@ impl FileExt for File {
 
         unsafe {
             DeviceIoControl(
-                self.as_handle(),
+                self.as_win32_handle(),
                 FSCTL_GET_INTEGRITY_INFORMATION,
                 None,
                 0,
@@ -220,7 +220,7 @@ impl FileExt for File {
     ) -> io::Result<()> {
         unsafe {
             DeviceIoControl(
-                self.as_handle(),
+                self.as_win32_handle(),
                 FSCTL_SET_INTEGRITY_INFORMATION,
                 Some(integrity_info as *mut _ as *mut c_void),
                 mem::size_of::<FSCTL_SET_INTEGRITY_INFORMATION_BUFFER>()
@@ -239,7 +239,7 @@ impl FileExt for File {
         let mut flags = 0u32;
         unsafe {
             GetVolumeInformationByHandleW(
-                self.as_handle(),
+                self.as_win32_handle(),
                 None,
                 None,
                 None,
@@ -250,7 +250,7 @@ impl FileExt for File {
         Ok((flags & FILE_SUPPORTS_BLOCK_REFCOUNTING) != 0)
     }
 
-    fn as_handle(&self) -> HANDLE {
+    fn as_win32_handle(&self) -> HANDLE {
         HANDLE(self.as_raw_handle())
     }
 }
@@ -280,8 +280,8 @@ impl FileExt for AutoRemovedFile<'_> {
         self.as_inner_file().is_block_cloning_supported()
     }
 
-    fn as_handle(&self) -> HANDLE {
-        self.as_inner_file().as_handle()
+    fn as_win32_handle(&self) -> HANDLE {
+        self.as_inner_file().as_win32_handle()
     }
 }
 

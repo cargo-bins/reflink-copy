@@ -2,35 +2,27 @@ use std::fs::File;
 use std::io;
 use std::path::Path;
 
-use crate::sys;
-
 /// Reflink `self` into `other`.
 ///
-/// This trait unifies the path based API ([`reflink`](crate::reflink)) and the
-/// file based API, which operates on already opened files.
+/// This trait unifies the path based and the file based APIs. Every
+/// implementation is a thin wrapper around one of the free functions.
 ///
 /// # Implementations
 ///
-/// - `Path` to `Path`: same as [`reflink`](crate::reflink). Thanks to
-///   auto-deref, it also works for `PathBuf`.
-/// - `File` to `Path`: like [`reflink`](crate::reflink), `other` is created
-///   with `OpenOptions::create_new` and gets the permissions of `self`.
-///   Since `File` has several implementations, pass `&Path`, e.g.
-///   `file.reflink(path_buf.as_path())`.
-/// - `File` to `File`: see below.
+/// | `Self` | `Other` | Same as |
+/// | --- | --- | --- |
+/// | `Path` | `Path` | [`reflink`](crate::reflink) |
+/// | `File` | `File` | [`reflink_file`](crate::reflink_file) |
+/// | `File` | `Path` | [`reflink_file_to_path`](crate::reflink_file_to_path) |
+/// | `File` | `(&Dir, &P)` | [`reflink_file_to_dir`](crate::reflink_file_to_dir) |
+/// | `(&Dir, &P)` | `(&Dir, &P)` | opens the source in its `Dir`, then [`reflink_file_to_dir`](crate::reflink_file_to_dir) |
 ///
-/// # `File` to `File`
+/// `Dir` is [`cap_std::fs::Dir`] and `P: AsRef<Path>`; these require the
+/// `cap-std` feature.
 ///
-/// The whole content of `self` is cloned into `other`, replacing its content;
-/// `other` must be opened for writing.
-/// Its permissions are left untouched, and if the operation fails its content
-/// is unspecified.
-///
-/// Supported on Linux (`FICLONE`), Android and Windows
-/// (`FSCTL_DUPLICATE_EXTENTS_TO_FILE`, see [`reflink`](crate::reflink) for its
-/// restrictions).
-/// On other platforms, including macOS whose `clonefile` can only create a
-/// new file, it returns an error of kind [`io::ErrorKind::Unsupported`].
+/// Thanks to auto-deref, `Path` to `Path` also works for `PathBuf`. Since
+/// `File` has several implementations, pass a `&Path` to it, e.g.
+/// `file.reflink(path_buf.as_path())`.
 ///
 /// ```no_run
 /// use reflink_copy::ReflinkOp;
@@ -56,28 +48,42 @@ impl ReflinkOp for Path {
 }
 
 impl ReflinkOp for File {
-    #[cfg_attr(
-        feature = "tracing",
-        tracing_attributes::instrument(name = "reflink_file")
-    )]
+    /// Same as [`reflink_file`](crate::reflink_file).
+    #[inline]
     fn reflink(&self, other: &File) -> io::Result<()> {
-        sys::reflink_file(self, other)
+        crate::reflink_file(self, other)
     }
 }
 
 impl ReflinkOp<Path> for File {
-    /// Reflink `self` into a new file at `other`.
-    ///
-    /// Same as [`reflink`](crate::reflink) except that the source is an
-    /// opened file: `other` is created with `OpenOptions::create_new`, and
-    /// the permissions of `self` are copied to it.
-    ///
-    /// Supported on Linux, Android, Windows and macOS (`fclonefileat`).
-    #[cfg_attr(
-        feature = "tracing",
-        tracing_attributes::instrument(name = "reflink_file_to_path")
-    )]
+    /// Same as [`reflink_file_to_path`](crate::reflink_file_to_path).
+    #[inline]
     fn reflink(&self, other: &Path) -> io::Result<()> {
-        sys::reflink_file_to_path(self, other)
+        crate::reflink_file_to_path(self, other)
+    }
+}
+
+#[cfg(all(feature = "cap-std", any(unix, windows)))]
+impl<P: AsRef<Path> + ?Sized> ReflinkOp<(&cap_std::fs::Dir, &P)> for File {
+    /// Same as [`reflink_file_to_dir`](crate::reflink_file_to_dir).
+    #[inline]
+    fn reflink(&self, (dir, path): &(&cap_std::fs::Dir, &P)) -> io::Result<()> {
+        crate::reflink_file_to_dir(self, dir, path)
+    }
+}
+
+#[cfg(all(feature = "cap-std", any(unix, windows)))]
+impl<P, Q> ReflinkOp<(&cap_std::fs::Dir, &Q)> for (&cap_std::fs::Dir, &P)
+where
+    P: AsRef<Path> + ?Sized,
+    Q: AsRef<Path> + ?Sized,
+{
+    /// Opens the source in its `Dir`, then same as
+    /// [`reflink_file_to_dir`](crate::reflink_file_to_dir).
+    #[inline]
+    fn reflink(&self, (dir, path): &(&cap_std::fs::Dir, &Q)) -> io::Result<()> {
+        let (src_dir, src_path) = self;
+        let src = src_dir.open(src_path)?.into_std();
+        crate::reflink_file_to_dir(&src, dir, path)
     }
 }

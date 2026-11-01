@@ -18,6 +18,17 @@ pub fn reflink_file_to_path(from: &fs::File, to: &Path) -> io::Result<()> {
     dest.persist(permissions)
 }
 
+#[cfg(feature = "cap-std")]
+pub fn reflink_file_to_dir(from: &fs::File, dir: &cap_std::fs::Dir, to: &Path) -> io::Result<()> {
+    let permissions = from.metadata()?.permissions();
+
+    // pass O_EXCL to mimic macos behaviour
+    let dest = AutoRemovedFile::create_new_in(dir, to)?;
+    rustix::fs::ioctl_ficlone(&dest, from)?;
+
+    dest.persist(permissions)
+}
+
 pub fn reflink_file(from: &fs::File, to: &fs::File) -> io::Result<()> {
     // FICLONE never shrinks `to`: if `to` is larger than `from`, it either
     // keeps the old tail of `to` (`from` ends at a block boundary) or fails

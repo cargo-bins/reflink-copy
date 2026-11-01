@@ -10,12 +10,14 @@ cfg_if! {
         mod unix;
         pub use self::unix::{reflink, reflink_file, reflink_file_to_path};
         pub(crate) use self::unix::reflink_block;
-        #[cfg(all(feature = "cap-std", any(target_os = "macos", target_os = "ios", target_os = "tvos", target_os = "watchos")))]
-        pub(crate) use self::unix::reflink_file_to_dir_entry;
+        #[cfg(feature = "cap-std")]
+        pub use self::unix::reflink_file_to_dir;
     } else if #[cfg(windows)] {
         mod windows_impl;
         pub use self::windows_impl::{reflink, reflink_file, reflink_file_to_path};
         pub use self::windows_impl::check_reflink_support;
+        #[cfg(feature = "cap-std")]
+        pub use self::windows_impl::reflink_file_to_dir;
         pub(crate) use self::windows_impl::reflink_block;
     } else {
         pub use self::reflink_not_supported as reflink;
@@ -62,6 +64,16 @@ pub fn reflink_file_not_supported(_from: &fs::File, _to: &fs::File) -> std::io::
 
 #[allow(dead_code)]
 pub fn reflink_file_to_path_not_supported(_from: &fs::File, _to: &Path) -> std::io::Result<()> {
+    Err(std::io::ErrorKind::Unsupported.into())
+}
+
+#[cfg(all(feature = "cap-std", any(unix, windows)))]
+#[allow(dead_code)]
+pub fn reflink_file_to_dir_not_supported(
+    _from: &fs::File,
+    _dir: &cap_std::fs::Dir,
+    _to: &Path,
+) -> std::io::Result<()> {
     Err(std::io::ErrorKind::Unsupported.into())
 }
 

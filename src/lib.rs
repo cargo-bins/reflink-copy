@@ -14,8 +14,6 @@
 //!
 //! As soon as other OSes support the functionality, support will be added.
 
-#[cfg(all(feature = "cap-std", any(unix, windows)))]
-mod dir_path;
 mod reflink_block;
 mod reflink_op;
 mod sys;
@@ -89,6 +87,105 @@ pub fn reflink(from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Result<()> {
     }
 
     inner(from.as_ref(), to.as_ref())
+}
+
+/// Reflinks the whole content of the opened file `from` into the opened file `to`.
+///
+/// Unlike [`reflink`], `to` already exists: its content is replaced, so it must be opened for
+/// writing. Its permissions are left untouched, and if the operation fails its content is
+/// unspecified.
+///
+/// ```no_run
+/// use std::fs::File;
+///
+/// fn clone() -> std::io::Result<()> {
+///     let src = File::open("src.txt")?;
+///     let dest = File::create_new("dest.txt")?;
+///     reflink_copy::reflink_file(&src, &dest)
+/// }
+/// ```
+///
+/// # Implementation details per platform
+///
+/// ## Linux / Android
+///
+/// Uses `ioctl_ficlone`. `to` is truncated first, since `FICLONE` never shrinks it.
+///
+/// ## Windows
+///
+/// Uses ioctl `FSCTL_DUPLICATE_EXTENTS_TO_FILE`, with the same restrictions as [`reflink`].
+///
+/// ## Other platforms
+///
+/// Returns an error of kind [`ErrorKind::Unsupported`], including on macOS, whose `clonefile`
+/// can only create a new file.
+#[cfg_attr(
+    feature = "tracing",
+    tracing_attributes::instrument(name = "reflink_file")
+)]
+pub fn reflink_file(from: &fs::File, to: &fs::File) -> io::Result<()> {
+    sys::reflink_file(from, to)
+}
+
+/// Reflinks the opened file `from` into a new file at `to`.
+///
+/// Same as [`reflink`], except that the source is already opened: `to` is created using
+/// `OpenOptions::create_new`, gets the permissions of `from`, and is removed if the operation
+/// fails.
+///
+/// # Implementation details per platform
+///
+/// Same as [`reflink`], except that macOS uses `fclonefileat`.
+#[inline(always)]
+pub fn reflink_file_to_path(from: &fs::File, to: impl AsRef<Path>) -> io::Result<()> {
+    #[cfg_attr(
+        feature = "tracing",
+        tracing_attributes::instrument(name = "reflink_file_to_path")
+    )]
+    fn inner(from: &fs::File, to: &Path) -> io::Result<()> {
+        sys::reflink_file_to_path(from, to)
+    }
+
+    inner(from, to.as_ref())
+}
+
+/// Reflinks the opened file `from` into a new file at `to`, relative to `dir`.
+///
+/// Same as [`reflink_file_to_path`], except that `to` is resolved by [`cap_std`] and can never
+/// escape `dir`: absolute paths, `..` going above `dir` and symlinks pointing outside of it are
+/// rejected.
+///
+/// ```no_run
+/// use cap_std::{ambient_authority, fs::Dir};
+/// use std::fs::File;
+///
+/// fn clone() -> std::io::Result<()> {
+///     let dir = Dir::open_ambient_dir("install-dir", ambient_authority())?;
+///     let src = File::open("src.txt")?;
+///     reflink_copy::reflink_file_to_dir(&src, &dir, "bin/dest.txt")
+/// }
+/// ```
+///
+/// # Implementation details per platform
+///
+/// Same as [`reflink_file_to_path`]. On macOS, the parent of `to` is opened with `cap_std`, then
+/// `fclonefileat` is called with only the last component of `to`.
+#[cfg(all(feature = "cap-std", any(unix, windows)))]
+#[inline(always)]
+pub fn reflink_file_to_dir(
+    from: &fs::File,
+    dir: &cap_std::fs::Dir,
+    to: impl AsRef<Path>,
+) -> io::Result<()> {
+    #[cfg_attr(
+        feature = "tracing",
+        tracing_attributes::instrument(name = "reflink_file_to_dir")
+    )]
+    fn inner(from: &fs::File, dir: &cap_std::fs::Dir, to: &Path) -> io::Result<()> {
+        sys::reflink_file_to_dir(from, dir, to)
+    }
+
+    inner(from, dir, to.as_ref())
 }
 
 /// Attempts to reflink a file. If the operation fails, a conventional copy operation is
@@ -195,6 +292,3 @@ pub enum ReflinkSupport {
 
 pub use reflink_block::ReflinkBlockBuilder;
 pub use reflink_op::ReflinkOp;
-
-#[cfg(all(feature = "cap-std", any(unix, windows)))]
-pub use dir_path::DirPath;

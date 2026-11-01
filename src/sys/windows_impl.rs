@@ -48,6 +48,16 @@ pub fn reflink_file_to_path(from: &File, to: &Path) -> io::Result<()> {
     dest.persist(permissions)
 }
 
+#[cfg(feature = "cap-std")]
+pub fn reflink_file_to_dir(from: &File, dir: &cap_std::fs::Dir, to: &Path) -> io::Result<()> {
+    let permissions = from.metadata()?.permissions();
+
+    let dest = AutoRemovedFile::create_new_in(dir, to)?;
+    reflink_file(from, dest.as_inner_file())?;
+
+    dest.persist(permissions)
+}
+
 /// Reflink the whole content of `src` into `dest`.
 ///
 /// `dest` must be opened for writing, and is truncated / extended to the
@@ -245,7 +255,7 @@ impl FileExt for File {
     }
 }
 
-impl FileExt for AutoRemovedFile {
+impl FileExt for AutoRemovedFile<'_> {
     fn set_sparse(&self) -> io::Result<()> {
         self.as_inner_file().set_sparse()
     }

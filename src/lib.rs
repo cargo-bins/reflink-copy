@@ -14,6 +14,8 @@
 //!
 //! As soon as other OSes support the functionality, support will be added.
 
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 mod reflink_block;
 mod reflink_op;
 mod sys;

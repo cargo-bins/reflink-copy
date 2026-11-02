@@ -7,26 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.28](https://github.com/cargo-bins/reflink-copy/compare/v0.1.27...v0.1.28) - 2025-09-08
-
-### Other
-
-- Support windows 0.61.0 as well as 0.62.0 ([#135](https://github.com/cargo-bins/reflink-copy/pull/135))
-
-## [0.1.27](https://github.com/cargo-bins/reflink-copy/compare/v0.1.26...v0.1.27) - 2025-09-05
-
-### Other
-
-- Bump windows from 0.61.0 to 0.62.0 ([#131](https://github.com/cargo-bins/reflink-copy/pull/131))
-- Bump actions/checkout from 4 to 5 ([#124](https://github.com/cargo-bins/reflink-copy/pull/124))
-# Changelog
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [Unreleased]
-
 ## [0.1.31](https://github.com/cargo-bins/reflink-copy/compare/v0.1.30...v0.1.31) - 2026-11-01
 
 ### Other
@@ -54,6 +34,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Other
 
 - Bump actions/checkout from 5 to 6 ([#148](https://github.com/cargo-bins/reflink-copy/pull/148))
+
+## [0.1.28](https://github.com/cargo-bins/reflink-copy/compare/v0.1.27...v0.1.28) - 2025-09-08
+
+### Other
+
+- Support windows 0.61.0 as well as 0.62.0 ([#135](https://github.com/cargo-bins/reflink-copy/pull/135))
+
+## [0.1.27](https://github.com/cargo-bins/reflink-copy/compare/v0.1.26...v0.1.27) - 2025-09-05
+
+### Other
+
+- Bump windows from 0.61.0 to 0.62.0 ([#131](https://github.com/cargo-bins/reflink-copy/pull/131))
+- Bump actions/checkout from 4 to 5 ([#124](https://github.com/cargo-bins/reflink-copy/pull/124))
 
 ## [0.1.26](https://github.com/cargo-bins/reflink-copy/compare/v0.1.25...v0.1.26) - 2025-03-19
 

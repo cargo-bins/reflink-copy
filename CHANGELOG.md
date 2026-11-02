@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.32](https://github.com/cargo-bins/reflink-copy/compare/v0.1.31...v0.1.32) - 2026-11-02
+
+### Other
+
+- Show required features on docs.rs ([#236](https://github.com/cargo-bins/reflink-copy/pull/236))
+- Fix out-of-order changelog ([#235](https://github.com/cargo-bins/reflink-copy/pull/235))
+
 ## [0.1.31](https://github.com/cargo-bins/reflink-copy/compare/v0.1.30...v0.1.31) - 2026-11-01
 
 ### Other

@@ -176,7 +176,7 @@ dependencies = [
 
 [[package]]
 name = "reflink-copy"
-version = "0.1.31"
+version = "0.1.32"
 dependencies = [
  "cap-std",
  "cfg-if",

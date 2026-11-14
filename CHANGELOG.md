@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.33](https://github.com/cargo-bins/reflink-copy/compare/v0.1.32...v0.1.33) - 2026-11-14
+
+### Other
+
+- Use windows-sys instead of windows ([#245](https://github.com/cargo-bins/reflink-copy/pull/245))
+- Bump taiki-e/install-action from 2.87.29 to 2.90.3 ([#243](https://github.com/cargo-bins/reflink-copy/pull/243))
+
 ## [0.1.32](https://github.com/cargo-bins/reflink-copy/compare/v0.1.31...v0.1.32) - 2026-11-02
 
 ### Other

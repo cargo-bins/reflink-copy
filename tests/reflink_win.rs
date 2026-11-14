@@ -281,24 +281,27 @@ fn test_reflink_block_6gb() -> std::io::Result<()> {
 
 fn set_sparse(file: &File) -> std::io::Result<()> {
     use std::os::windows::io::AsRawHandle;
-    use windows::Win32::{
+    use windows_sys::Win32::{
         Foundation::HANDLE,
         System::{Ioctl::FSCTL_SET_SPARSE, IO::DeviceIoControl},
     };
 
     let mut bytes_returned = 0u32;
-    unsafe {
+    let ret = unsafe {
         DeviceIoControl(
-            HANDLE(file.as_raw_handle()),
+            file.as_raw_handle() as HANDLE,
             FSCTL_SET_SPARSE,
-            None,
+            std::ptr::null(),
             0,
-            None,
+            std::ptr::null_mut(),
             0,
-            Some(&mut bytes_returned as *mut _),
-            None,
+            &mut bytes_returned,
+            std::ptr::null_mut(),
         )
-    }?;
+    };
+    if ret == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
     Ok(())
 }
 

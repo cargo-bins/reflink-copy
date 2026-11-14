@@ -176,7 +176,7 @@ dependencies = [
 
 [[package]]
 name = "reflink-copy"
-version = "0.1.32"
+version = "0.1.33"
 dependencies = [
  "cap-std",
  "cfg-if",
@@ -187,7 +187,7 @@ dependencies = [
  "tracing",
  "tracing-attributes",
  "walkdir",
- "windows-sys 0.61.1",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

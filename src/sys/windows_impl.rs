@@ -157,87 +157,37 @@ trait FileExt {
 
 impl FileExt for File {
     fn set_sparse(&self) -> io::Result<()> {
-        let mut bytes_returned = 0u32;
-        cvt(unsafe {
-            DeviceIoControl(
-                self.as_win32_handle(),
-                FSCTL_SET_SPARSE,
-                ptr::null(),
-                0,
-                ptr::null_mut(),
-                0,
-                &mut bytes_returned,
-                ptr::null_mut(),
-            )
-        })?;
-
-        Ok(())
+        // SAFETY: FSCTL_SET_SPARSE optionally takes a FILE_SET_SPARSE_BUFFER
+        // and has no output.
+        unsafe { device_io_control(self.as_handle(), FSCTL_SET_SPARSE, &()) }
     }
 
     fn unset_sparse(&self) -> io::Result<()> {
-        let mut bytes_returned = 0u32;
-        let mut sparse_flag: u32 = 0;
-
-        cvt(unsafe {
-            DeviceIoControl(
-                self.as_win32_handle(),
-                FSCTL_SET_SPARSE,
-                &mut sparse_flag as *mut _ as *mut c_void,
-                mem::size_of::<u32>() as u32,
-                ptr::null_mut(),
-                0,
-                &mut bytes_returned,
-                ptr::null_mut(),
-            )
-        })?;
-
-        Ok(())
+        let sparse_flag: u32 = 0;
+        // SAFETY: FSCTL_SET_SPARSE reads `SetSparse: BOOLEAN` from the first
+        // byte of the input and has no output.
+        unsafe { device_io_control(self.as_handle(), FSCTL_SET_SPARSE, &sparse_flag) }
     }
 
     fn get_integrity_information(&self) -> io::Result<FSCTL_GET_INTEGRITY_INFORMATION_BUFFER> {
-        let mut bytes_returned = 0u32;
-        let mut integrity_info: MaybeUninit<FSCTL_GET_INTEGRITY_INFORMATION_BUFFER> =
-            MaybeUninit::uninit();
-
-        cvt(unsafe {
-            DeviceIoControl(
-                self.as_win32_handle(),
-                FSCTL_GET_INTEGRITY_INFORMATION,
-                ptr::null(),
-                0,
-                integrity_info.as_mut_ptr() as *mut c_void,
-                mem::size_of::<FSCTL_GET_INTEGRITY_INFORMATION_BUFFER>()
-                    .try_into()
-                    .unwrap(),
-                &mut bytes_returned,
-                ptr::null_mut(),
-            )
-        })?;
-
-        // SAFETY: DeviceIoControl succeeded, so the output buffer is initialized.
-        Ok(unsafe { integrity_info.assume_init() })
+        // SAFETY: FSCTL_GET_INTEGRITY_INFORMATION has no input and writes a
+        // FSCTL_GET_INTEGRITY_INFORMATION_BUFFER.
+        unsafe { device_io_control(self.as_handle(), FSCTL_GET_INTEGRITY_INFORMATION, &()) }
     }
 
     fn set_integrity_information(
         &self,
         integrity_info: &mut FSCTL_SET_INTEGRITY_INFORMATION_BUFFER,
     ) -> io::Result<()> {
-        let mut bytes_returned = 0u32;
-        cvt(unsafe {
-            DeviceIoControl(
-                self.as_win32_handle(),
+        // SAFETY: FSCTL_SET_INTEGRITY_INFORMATION reads a
+        // FSCTL_SET_INTEGRITY_INFORMATION_BUFFER and has no output.
+        unsafe {
+            device_io_control(
+                self.as_handle(),
                 FSCTL_SET_INTEGRITY_INFORMATION,
-                integrity_info as *mut _ as *mut c_void,
-                mem::size_of::<FSCTL_SET_INTEGRITY_INFORMATION_BUFFER>()
-                    .try_into()
-                    .unwrap(),
-                ptr::null_mut(),
-                0,
-                &mut bytes_returned,
-                ptr::null_mut(),
+                integrity_info,
             )
-        })?;
-        Ok(())
+        }
     }
 
     fn is_block_cloning_supported(&self) -> io::Result<bool> {
@@ -445,27 +395,75 @@ fn duplicate_extent_to_file(
     to_offset: u64,
     src_length: u64,
 ) -> io::Result<()> {
-    let mut dup_extent = DUPLICATE_EXTENTS_DATA {
+    let dup_extent = DUPLICATE_EXTENTS_DATA {
         FileHandle: from.as_raw_handle() as HANDLE,
         SourceFileOffset: from_offset as i64,
         TargetFileOffset: to_offset as i64,
         ByteCount: src_length as i64,
     };
 
+    // SAFETY: FSCTL_DUPLICATE_EXTENTS_TO_FILE reads a DUPLICATE_EXTENTS_DATA
+    // (whose `FileHandle` is borrowed from `from`) and has no output.
+    unsafe { device_io_control(to, FSCTL_DUPLICATE_EXTENTS_TO_FILE, &dup_extent) }
+}
+
+/// Synchronous [DeviceIoControl] with a typed input and output buffer.
+///
+/// Returns an error if the call fails or if it did not write a whole `O`.
+///
+/// # Safety
+///
+/// `code` must be a control code that reads at most an `I` from its input
+/// buffer, writes at most an `O` to its output buffer (`()` for "no buffer"),
+/// does not dereference any pointer stored in them, and for which every
+/// fully written `O` is valid.
+///
+/// [DeviceIoControl]: https://learn.microsoft.com/en-us/windows/win32/api/ioapiset/nf-ioapiset-deviceiocontrol
+unsafe fn device_io_control<I, O>(
+    handle: BorrowedHandle<'_>,
+    code: u32,
+    input: &I,
+) -> io::Result<O> {
+    fn buf_len<T>() -> u32 {
+        mem::size_of::<T>().try_into().unwrap()
+    }
+    fn buf_ptr<T>(ptr: *mut T) -> *mut c_void {
+        if mem::size_of::<T>() == 0 {
+            ptr::null_mut()
+        } else {
+            ptr.cast()
+        }
+    }
+
+    let mut output = MaybeUninit::<O>::uninit();
+    // lpBytesReturned must not be null when lpOverlapped is null.
     let mut bytes_returned = 0u32;
+
+    // SAFETY: both buffers are valid for their sizes and `handle` is a live
+    // handle; the caller guarantees `code` matches `I` and `O`.
     cvt(unsafe {
         DeviceIoControl(
-            to.as_raw_handle() as HANDLE,
-            FSCTL_DUPLICATE_EXTENTS_TO_FILE,
-            &mut dup_extent as *mut _ as *mut c_void,
-            size_of::<DUPLICATE_EXTENTS_DATA>().try_into().unwrap(),
-            ptr::null_mut(),
-            0,
+            handle.as_raw_handle() as HANDLE,
+            code,
+            buf_ptr(input as *const I as *mut I),
+            buf_len::<I>(),
+            buf_ptr(output.as_mut_ptr()),
+            buf_len::<O>(),
             &mut bytes_returned,
             ptr::null_mut(),
         )
     })?;
-    Ok(())
+
+    if bytes_returned != buf_len::<O>() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "DeviceIoControl returned a truncated output buffer",
+        ));
+    }
+
+    // SAFETY: the call succeeded and wrote all `size_of::<O>()` bytes, which
+    // the caller guarantees forms a valid `O`.
+    Ok(unsafe { output.assume_init() })
 }
 
 #[cfg(test)]

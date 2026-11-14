@@ -14,14 +14,14 @@ use std::{
         io::{AsHandle, AsRawHandle, BorrowedHandle},
     },
     path::Path,
+    ptr,
 };
 
-use windows::core::PCWSTR;
-use windows::Win32::{
+use windows_sys::Win32::{
     Foundation::{HANDLE, MAX_PATH},
     Storage::FileSystem::{
         GetVolumeInformationByHandleW, GetVolumeInformationW, GetVolumeNameForVolumeMountPointW,
-        GetVolumePathNameW, FILE_ATTRIBUTE_SPARSE_FILE, FILE_FLAGS_AND_ATTRIBUTES,
+        GetVolumePathNameW, FILE_ATTRIBUTE_SPARSE_FILE,
     },
     System::{
         Ioctl::{
@@ -34,6 +34,15 @@ use windows::Win32::{
         IO::DeviceIoControl,
     },
 };
+
+/// Converts the `BOOL` returned by win32 functions into `io::Result`.
+fn cvt(ret: i32) -> io::Result<()> {
+    if ret == 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
 
 pub fn reflink(from: &Path, to: &Path) -> io::Result<()> {
     reflink_file_to_path(&File::open(from)?, to)
@@ -62,9 +71,7 @@ pub fn reflink_file(src: &File, dest: &File) -> io::Result<()> {
     // Inspired by https://github.com/0xbadfca11/reflink/blob/master/reflink.cpp
     let src_metadata = src.metadata()?;
     let src_file_size = src_metadata.file_size();
-    let src_is_sparse =
-        (FILE_FLAGS_AND_ATTRIBUTES(src_metadata.file_attributes()) & FILE_ATTRIBUTE_SPARSE_FILE).0
-            != 0;
+    let src_is_sparse = (src_metadata.file_attributes() & FILE_ATTRIBUTE_SPARSE_FILE) != 0;
 
     // Set the destination to be sparse while we clone.
     // Important to avoid allocating zero-backed real storage when cloning
@@ -151,18 +158,18 @@ trait FileExt {
 impl FileExt for File {
     fn set_sparse(&self) -> io::Result<()> {
         let mut bytes_returned = 0u32;
-        unsafe {
+        cvt(unsafe {
             DeviceIoControl(
                 self.as_win32_handle(),
                 FSCTL_SET_SPARSE,
-                None,
+                ptr::null(),
                 0,
-                None,
+                ptr::null_mut(),
                 0,
-                Some(&mut bytes_returned as *mut _),
-                None,
+                &mut bytes_returned,
+                ptr::null_mut(),
             )
-        }?;
+        })?;
 
         Ok(())
     }
@@ -171,18 +178,18 @@ impl FileExt for File {
         let mut bytes_returned = 0u32;
         let mut sparse_flag: u32 = 0;
 
-        unsafe {
+        cvt(unsafe {
             DeviceIoControl(
                 self.as_win32_handle(),
                 FSCTL_SET_SPARSE,
-                Some(&mut sparse_flag as *mut _ as *mut c_void),
+                &mut sparse_flag as *mut _ as *mut c_void,
                 mem::size_of::<u32>() as u32,
-                None,
+                ptr::null_mut(),
                 0,
-                Some(&mut bytes_returned as *mut _),
-                None,
+                &mut bytes_returned,
+                ptr::null_mut(),
             )
-        }?;
+        })?;
 
         Ok(())
     }
@@ -192,62 +199,66 @@ impl FileExt for File {
         let mut integrity_info: MaybeUninit<FSCTL_GET_INTEGRITY_INFORMATION_BUFFER> =
             MaybeUninit::uninit();
 
-        unsafe {
+        cvt(unsafe {
             DeviceIoControl(
                 self.as_win32_handle(),
                 FSCTL_GET_INTEGRITY_INFORMATION,
-                None,
+                ptr::null(),
                 0,
-                Some(integrity_info.as_mut_ptr() as *mut c_void),
+                integrity_info.as_mut_ptr() as *mut c_void,
                 mem::size_of::<FSCTL_GET_INTEGRITY_INFORMATION_BUFFER>()
                     .try_into()
                     .unwrap(),
-                Some(&mut bytes_returned as *mut _),
-                None,
-            )?;
+                &mut bytes_returned,
+                ptr::null_mut(),
+            )
+        })?;
 
-            Ok(integrity_info.assume_init())
-        }
+        // SAFETY: DeviceIoControl succeeded, so the output buffer is initialized.
+        Ok(unsafe { integrity_info.assume_init() })
     }
 
     fn set_integrity_information(
         &self,
         integrity_info: &mut FSCTL_SET_INTEGRITY_INFORMATION_BUFFER,
     ) -> io::Result<()> {
-        unsafe {
+        let mut bytes_returned = 0u32;
+        cvt(unsafe {
             DeviceIoControl(
                 self.as_win32_handle(),
                 FSCTL_SET_INTEGRITY_INFORMATION,
-                Some(integrity_info as *mut _ as *mut c_void),
+                integrity_info as *mut _ as *mut c_void,
                 mem::size_of::<FSCTL_SET_INTEGRITY_INFORMATION_BUFFER>()
                     .try_into()
                     .unwrap(),
-                None,
+                ptr::null_mut(),
                 0,
-                None,
-                None,
+                &mut bytes_returned,
+                ptr::null_mut(),
             )
-        }?;
+        })?;
         Ok(())
     }
 
     fn is_block_cloning_supported(&self) -> io::Result<bool> {
         let mut flags = 0u32;
-        unsafe {
+        cvt(unsafe {
             GetVolumeInformationByHandleW(
                 self.as_win32_handle(),
-                None,
-                None,
-                None,
-                Some(&mut flags as *mut _),
-                None,
+                ptr::null_mut(),
+                0,
+                ptr::null_mut(),
+                ptr::null_mut(),
+                &mut flags,
+                ptr::null_mut(),
+                0,
             )
-        }?;
+        })?;
         Ok((flags & FILE_SUPPORTS_BLOCK_REFCOUNTING) != 0)
     }
 
     fn as_win32_handle(&self) -> HANDLE {
-        HANDLE(self.as_raw_handle())
+        self.as_raw_handle() as HANDLE
     }
 }
 
@@ -330,7 +341,13 @@ fn get_volume_path(path: impl AsRef<Path>) -> io::Result<Vec<u16>> {
         .collect();
     let mut volume_name_buffer = vec![0u16; MAX_PATH as usize];
 
-    unsafe { GetVolumePathNameW(PCWSTR(path_wide.as_ptr()), volume_name_buffer.as_mut()) }?;
+    cvt(unsafe {
+        GetVolumePathNameW(
+            path_wide.as_ptr(),
+            volume_name_buffer.as_mut_ptr(),
+            volume_name_buffer.len() as u32,
+        )
+    })?;
 
     if let Some(pos) = volume_name_buffer.iter().position(|&c| c == 0) {
         volume_name_buffer.truncate(pos);
@@ -345,9 +362,13 @@ fn get_volume_path(path: impl AsRef<Path>) -> io::Result<Vec<u16>> {
 /// mount point (drive letter, volume GUID path, or mounted folder).
 fn get_volume_guid_path(volume_path_w: &[u16]) -> io::Result<Vec<u16>> {
     let mut volume_guid_path = vec![0u16; 50usize];
-    unsafe {
-        GetVolumeNameForVolumeMountPointW(PCWSTR(volume_path_w.as_ptr()), volume_guid_path.as_mut())
-    }?;
+    cvt(unsafe {
+        GetVolumeNameForVolumeMountPointW(
+            volume_path_w.as_ptr(),
+            volume_guid_path.as_mut_ptr(),
+            volume_guid_path.len() as u32,
+        )
+    })?;
 
     if let Some(pos) = volume_guid_path.iter().position(|&c| c == 0) {
         volume_guid_path.truncate(pos);
@@ -362,16 +383,18 @@ fn get_volume_guid_path(volume_path_w: &[u16]) -> io::Result<Vec<u16>> {
 fn get_volume_flags(volume_path_w: &[u16]) -> io::Result<u32> {
     let mut file_system_flags = 0u32;
 
-    unsafe {
+    cvt(unsafe {
         GetVolumeInformationW(
-            PCWSTR(volume_path_w.as_ptr()),
-            None,
-            None,
-            None,
-            Some(&mut file_system_flags as *mut _),
-            None,
+            volume_path_w.as_ptr(),
+            ptr::null_mut(),
+            0,
+            ptr::null_mut(),
+            ptr::null_mut(),
+            &mut file_system_flags,
+            ptr::null_mut(),
+            0,
         )
-    }?;
+    })?;
 
     Ok(file_system_flags)
 }
@@ -423,25 +446,25 @@ fn duplicate_extent_to_file(
     src_length: u64,
 ) -> io::Result<()> {
     let mut dup_extent = DUPLICATE_EXTENTS_DATA {
-        FileHandle: HANDLE(from.as_raw_handle()),
+        FileHandle: from.as_raw_handle() as HANDLE,
         SourceFileOffset: from_offset as i64,
         TargetFileOffset: to_offset as i64,
         ByteCount: src_length as i64,
     };
 
     let mut bytes_returned = 0u32;
-    unsafe {
+    cvt(unsafe {
         DeviceIoControl(
-            HANDLE(to.as_raw_handle()),
+            to.as_raw_handle() as HANDLE,
             FSCTL_DUPLICATE_EXTENTS_TO_FILE,
-            Some(&mut dup_extent as *mut _ as *mut c_void),
+            &mut dup_extent as *mut _ as *mut c_void,
             size_of::<DUPLICATE_EXTENTS_DATA>().try_into().unwrap(),
-            None,
+            ptr::null_mut(),
             0,
-            Some(&mut bytes_returned as *mut _),
-            None,
+            &mut bytes_returned,
+            ptr::null_mut(),
         )
-    }?;
+    })?;
     Ok(())
 }
 
